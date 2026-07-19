@@ -1,4 +1,8 @@
-Welcome to your new TanStack Start app! 
+# Arumi
+
+Practice real-life English conversations in a chat that feels like texting a friend. Pick a scene — a job interview, fixing a wrong coffee order, negotiating rent — and talk it through with a persona while a coach quietly watches, marks off your goals, and hands you a full report at the end.
+
+Everything in this demo runs on your device: conversations are simulated locally and progress is saved in your browser. No account or API keys needed — just start the dev server and open the app.
 
 # Getting Started
 

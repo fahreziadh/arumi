@@ -10,33 +10,69 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SessionSessionIdRouteImport } from './routes/session.$sessionId'
+import { Route as ReportSessionIdRouteImport } from './routes/report.$sessionId'
+import { Route as PrepareUseCaseRouteImport } from './routes/prepare.$useCase'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SessionSessionIdRoute = SessionSessionIdRouteImport.update({
+  id: '/session/$sessionId',
+  path: '/session/$sessionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportSessionIdRoute = ReportSessionIdRouteImport.update({
+  id: '/report/$sessionId',
+  path: '/report/$sessionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrepareUseCaseRoute = PrepareUseCaseRouteImport.update({
+  id: '/prepare/$useCase',
+  path: '/prepare/$useCase',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/prepare/$useCase': typeof PrepareUseCaseRoute
+  '/report/$sessionId': typeof ReportSessionIdRoute
+  '/session/$sessionId': typeof SessionSessionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/prepare/$useCase': typeof PrepareUseCaseRoute
+  '/report/$sessionId': typeof ReportSessionIdRoute
+  '/session/$sessionId': typeof SessionSessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/prepare/$useCase': typeof PrepareUseCaseRoute
+  '/report/$sessionId': typeof ReportSessionIdRoute
+  '/session/$sessionId': typeof SessionSessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    '/' | '/prepare/$useCase' | '/report/$sessionId' | '/session/$sessionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/prepare/$useCase' | '/report/$sessionId' | '/session/$sessionId'
+  id:
+    | '__root__'
+    | '/'
+    | '/prepare/$useCase'
+    | '/report/$sessionId'
+    | '/session/$sessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PrepareUseCaseRoute: typeof PrepareUseCaseRoute
+  ReportSessionIdRoute: typeof ReportSessionIdRoute
+  SessionSessionIdRoute: typeof SessionSessionIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +84,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/session/$sessionId': {
+      id: '/session/$sessionId'
+      path: '/session/$sessionId'
+      fullPath: '/session/$sessionId'
+      preLoaderRoute: typeof SessionSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/report/$sessionId': {
+      id: '/report/$sessionId'
+      path: '/report/$sessionId'
+      fullPath: '/report/$sessionId'
+      preLoaderRoute: typeof ReportSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prepare/$useCase': {
+      id: '/prepare/$useCase'
+      path: '/prepare/$useCase'
+      fullPath: '/prepare/$useCase'
+      preLoaderRoute: typeof PrepareUseCaseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PrepareUseCaseRoute: PrepareUseCaseRoute,
+  ReportSessionIdRoute: ReportSessionIdRoute,
+  SessionSessionIdRoute: SessionSessionIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

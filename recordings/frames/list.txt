@@ -1,0 +1,16 @@
+file 'frame_home.png'
+duration 3
+file 'frame_prepare.png'
+duration 3
+file 'frame_filled.png'
+duration 2
+file 'frame_confirm.png'
+duration 3
+file 'frame_chat.png'
+duration 3
+file 'frame_msgtyped.png'
+duration 2
+file 'frame_sent.png'
+duration 4
+file 'frame_sent.png'
+duration 1
