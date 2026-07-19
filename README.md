@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/home.png" alt="Arumi home screen: pick a format to practice in" width="760" />
+  <img src=".github/home.png" alt="Arumi home screen: pick a format to practice in" width="900" />
 </p>
 
 # Arumi
