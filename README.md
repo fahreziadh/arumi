@@ -8,6 +8,8 @@ Practice English where you write it. Arumi gives you low-stakes reps in the real
 
 Instead of flashcards or generic chatbot windows, you practice inside rooms that look and feel like the real thing: email threads, Slack, GitHub issues, WhatsApp, Telegram, Discord, Teams, LinkedIn, and customer support chats. An AI persona plays the other side of the conversation. A coach reads every message you send and helps you sound natural.
 
+And it's BYOK: bring your own OpenRouter key and it's yours to run. Swap models from the admin panel (cheap-and-fast through frontier), watch exactly what every user costs you, and pay the provider directly. No markup, no lock-in.
+
 ## How it works
 
 1. **Pick a scene.** Ten formats, from formal email threads to casual chats, or describe your own scenario.
