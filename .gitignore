@@ -12,3 +12,13 @@ dist-ssr
 __unconfig*
 todos.json
 .env.local
+
+# local Convex state
+.convex
+
+# dev capture artifacts (screenshots, flow recordings)
+recordings/
+
+# generated AI agent skill copies (reinstall: npx convex ai-files install)
+agent/
+.agents/

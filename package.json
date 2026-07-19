@@ -1,6 +1,12 @@
 {
   "name": "arumi",
+  "description": "Practice English where you write it: realistic email, chat, and issue-thread rooms with an AI conversation partner and a coach on every message",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fahreziadh/arumi.git"
+  },
   "type": "module",
   "imports": {
     "#/*": "./src/*"
