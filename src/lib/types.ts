@@ -1,3 +1,5 @@
+import type { CoachTip } from "./coach";
+
 export type Platform =
 	| "email"
 	| "slack"
@@ -28,6 +30,14 @@ export interface Message {
 	author: "user" | "persona";
 	text: string;
 	at: number;
+	/** AI coach analysis; absent until the server coach has run. */
+	tips?: CoachTip[];
+	/** AI full-message rewrite; null means "already natural". */
+	rewrite?: string | null;
+	/** Why coach analysis failed for this message, when it did. */
+	tipsError?: string | null;
+	/** True while the persona is still streaming this message. */
+	streaming?: boolean;
 }
 
 export interface Conversation {
@@ -38,6 +48,8 @@ export interface Conversation {
 	persona: Persona;
 	createdAt: number;
 	messages: Message[];
+	/** Why the last AI generation failed; rooms show this with a retry. */
+	aiError?: string | null;
 }
 
 export interface AppState {

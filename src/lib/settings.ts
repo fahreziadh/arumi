@@ -3,13 +3,16 @@ import { useSyncExternalStore } from "react";
 const STORAGE_KEY = "arumi:settings:v1";
 
 export interface Settings {
-	/** Coach cards that point out useful phrases in the partner's replies. */
+	/** Highlight useful phrases in the partner's replies. */
 	aiHighlights: boolean;
-	/** Coach cards with feedback on the message you just sent. */
+	/** Mark up messages you send with fixes and tone checks. */
 	submissionHighlights: boolean;
 }
 
-const defaults: Settings = { aiHighlights: true, submissionHighlights: true };
+const defaults: Settings = {
+	aiHighlights: true,
+	submissionHighlights: true,
+};
 
 function load(): Settings {
 	if (typeof localStorage === "undefined") return defaults;

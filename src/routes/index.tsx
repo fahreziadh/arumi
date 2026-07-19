@@ -1,8 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import {
+	Authenticated,
+	AuthLoading,
+	Unauthenticated,
+	useMutation,
+	useQuery,
+} from "convex/react";
 import { formatDistanceToNow } from "date-fns";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { AppHeader } from "@/components/app-header";
+import { SignInScreen } from "@/components/auth-gate";
 import { PlatformTile } from "@/components/platform-tile";
 import {
 	AlertDialog,
@@ -16,16 +26,28 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { deleteConversation, useAppState } from "@/lib/store";
 import { useCases } from "@/lib/use-cases";
 
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
-	const app = useAppState();
-	const conversations = Object.values(app.conversations).sort(
-		(a, b) => b.createdAt - a.createdAt,
+	return (
+		<>
+			<AuthLoading>
+				<div className="h-dvh" />
+			</AuthLoading>
+			<Unauthenticated>
+				<SignInScreen />
+			</Unauthenticated>
+			<Authenticated>
+				<Dashboard />
+			</Authenticated>
+		</>
 	);
+}
+
+function Dashboard() {
+	const conversations = useQuery(api.conversations.list) ?? [];
 
 	return (
 		<div className="min-h-dvh">
@@ -115,10 +137,11 @@ function DeleteConversationButton({
 	id,
 	topic,
 }: {
-	id: string;
+	id: Id<"conversations">;
 	topic: string;
 }) {
 	const [open, setOpen] = useState(false);
+	const remove = useMutation(api.conversations.remove);
 	return (
 		<AlertDialog open={open} onOpenChange={setOpen}>
 			<AlertDialogTrigger
@@ -137,7 +160,7 @@ function DeleteConversationButton({
 				<AlertDialogHeader>
 					<AlertDialogTitle>Delete This Conversation?</AlertDialogTitle>
 					<AlertDialogDescription>
-						“{topic}” will be removed from this device. You can’t undo this.
+						“{topic}” will be removed from your account. You can’t undo this.
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
@@ -146,7 +169,7 @@ function DeleteConversationButton({
 						variant="destructive"
 						onClick={() => {
 							setOpen(false);
-							deleteConversation(id);
+							void remove({ conversationId: id });
 						}}
 					>
 						Delete

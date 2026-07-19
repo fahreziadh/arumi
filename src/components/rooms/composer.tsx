@@ -1,16 +1,14 @@
 import { ArrowUp, SendHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { LimitNotice } from "@/components/rooms/limit-notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { PlatformTheme } from "@/lib/platform-theme";
+import { useDailyLimit } from "@/lib/use-daily-limit";
 import { cn } from "@/lib/utils";
 
-/**
- * Bottom message bar for chat-style rooms: platform-themed strip, pill input,
- * round send button. Owns its draft state.
- */
 export function ChatComposer({
 	personaName,
 	theme,
@@ -21,6 +19,7 @@ export function ChatComposer({
 	onSend: (text: string) => void;
 }) {
 	const [draft, setDraft] = useState("");
+	const limit = useDailyLimit();
 
 	const submit = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -30,9 +29,17 @@ export function ChatComposer({
 		onSend(text);
 	};
 
+	if (limit?.limited) {
+		return (
+			<div className={cn("shrink-0", theme.composerBar)}>
+				<div className="mx-auto w-full max-w-2xl px-4 py-3 sm:px-6">
+					<LimitNotice limit={limit.limit} resetAt={limit.resetAt} />
+				</div>
+			</div>
+		);
+	}
+
 	return (
-		// Transparent by default so the wall shows through; only platforms whose
-		// real apps draw a composer bar set one via the theme.
 		<div className={cn("shrink-0", theme.composerBar)}>
 			<form
 				onSubmit={submit}
@@ -64,11 +71,6 @@ export function ChatComposer({
 	);
 }
 
-/**
- * Long-form composer (email replies, issue comments): borderless textarea,
- * ⌘↵ submit, footer with submit button + hint. Controlled, so callers can
- * preserve the draft across collapse/expand.
- */
 export function TextareaComposer({
 	value,
 	onValueChange,
@@ -100,11 +102,21 @@ export function TextareaComposer({
 	textareaClassName?: string;
 	className?: string;
 }) {
+	const limit = useDailyLimit();
+
 	const submit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!value.trim()) return;
 		onSubmit();
 	};
+
+	if (limit?.limited) {
+		return (
+			<div className={className}>
+				<LimitNotice limit={limit.limit} resetAt={limit.resetAt} />
+			</div>
+		);
+	}
 
 	return (
 		<form onSubmit={submit} aria-label={formLabel} className={className}>

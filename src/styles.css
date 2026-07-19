@@ -71,11 +71,11 @@ body {
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.205 0 0);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(0.95 0 0);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
+  --muted: oklch(0.95 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent: oklch(0.95 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.215 27);
   --border: oklch(0.922 0 0);
@@ -91,7 +91,7 @@ body {
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.95 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
@@ -207,12 +207,84 @@ html:active-view-transition-type(prep-step)::view-transition-new(root) {
   }
 }
 
-
 /* Original hand-drawn doodle wall for the WhatsApp room (not the real artwork). */
 .wall-whatsapp {
   background-color: #efeae2;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%23B9AC9A' stroke-opacity='0.3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='rotate(-8 34 34)'%3E%3Cpath d='M20 24h26a6 6 0 0 1 6 6v10a6 6 0 0 1-6 6H32l-7 6 1-6h-6a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6z'/%3E%3C/g%3E%3Cpath d='M150 22l2.6 8.4 8.4 2.6-8.4 2.6-2.6 8.4-2.6-8.4-8.4-2.6 8.4-2.6z'/%3E%3Cpath transform='rotate(10 52 148)' d='M52 158c-6-5-12-9.5-12-15a6.5 6.5 0 0 1 12-3.5A6.5 6.5 0 0 1 64 143c0 5.5-6 10-12 15z'/%3E%3Cg transform='rotate(-6 150 150)'%3E%3Cpath d='M138 146h22v12a8 8 0 0 1-8 8h-6a8 8 0 0 1-8-8z'/%3E%3Cpath d='M160 148h4a5 5 0 0 1 0 10h-4'/%3E%3Cpath d='M144 138c0-3 2-3 2-6M152 138c0-3 2-3 2-6'/%3E%3C/g%3E%3Cpath transform='rotate(14 100 84)' d='M86 90l28-12-10 24-5-9zM104 102l-5-9 14-15'/%3E%3Cg transform='rotate(6 32 104)'%3E%3Ccircle cx='32' cy='104' r='3.5'/%3E%3Ccircle cx='32' cy='95' r='4'/%3E%3Ccircle cx='40' cy='100' r='4'/%3E%3Ccircle cx='38' cy='110' r='4'/%3E%3Ccircle cx='26' cy='110' r='4'/%3E%3Ccircle cx='24' cy='100' r='4'/%3E%3C/g%3E%3Cpath d='M96 176q6-8 12 0t12 0'/%3E%3Cg transform='rotate(-10 172 100)'%3E%3Cpath d='M170 108V88l8-2v20'/%3E%3Ccircle cx='167' cy='108' r='3.5'/%3E%3Ccircle cx='175' cy='106' r='3.5'/%3E%3C/g%3E%3Ccircle cx='100' cy='30' r='1.4'/%3E%3Ccircle cx='184' cy='66' r='1.4'/%3E%3Ccircle cx='16' cy='70' r='1.4'/%3E%3Ccircle cx='70' cy='66' r='1.4'/%3E%3Ccircle cx='140' cy='115' r='1.4'/%3E%3Ccircle cx='66' cy='188' r='1.4'/%3E%3Ccircle cx='184' cy='180' r='1.4'/%3E%3Ccircle cx='20' cy='180' r='1.4'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 220px 220px;
+}
+
+/* Words of a coach question fade into place one by one. */
+@keyframes word-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: none;
+  }
+}
+.word-in {
+  display: inline-block;
+  animation: word-in 0.4s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .word-in {
+    animation: none;
+  }
+}
+
+/* While the coach reads a message, a highlighter stripe sweeps the text. */
+@keyframes coach-scan {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.coach-scan {
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 217 74 / 0.28) 42%,
+    rgb(255 217 74 / 0.5) 50%,
+    rgb(255 217 74 / 0.28) 58%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  border-radius: 0.2em;
+  box-decoration-break: clone;
+  animation: coach-scan 1.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-scan {
+    animation: none;
+    background-image: none;
+  }
+}
+
+/* The prepare coach bubble hovers gently, like a card in flight. */
+@keyframes coach-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.coach-bubble {
+  animation: coach-float 3.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-bubble {
+    animation: none;
+  }
 }
 
 /* Original doodle wall for the Telegram room (not the real artwork). */

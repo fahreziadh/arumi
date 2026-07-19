@@ -1,4 +1,5 @@
-import { Settings2 } from "lucide-react";
+import { Link, useParams } from "@tanstack/react-router";
+import { Flag, Settings2 } from "lucide-react";
 import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,10 +11,35 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { updateSettings, useSettings } from "@/lib/settings";
 
+function CoachSwitch({
+	label,
+	description,
+	checked,
+	onCheckedChange,
+}: {
+	label: string;
+	description: string;
+	checked: boolean;
+	onCheckedChange: (value: boolean) => void;
+}) {
+	const id = useId();
+	return (
+		<div className="flex items-center justify-between gap-4">
+			<Label
+				htmlFor={id}
+				className="flex-1 flex-col items-start gap-0.5 font-normal"
+			>
+				<span className="text-sm">{label}</span>
+				<span className="text-muted-foreground text-xs">{description}</span>
+			</Label>
+			<Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+		</div>
+	);
+}
+
 export function RoomSettings() {
 	const settings = useSettings();
-	const aiId = useId();
-	const subId = useId();
+	const { sessionId } = useParams({ strict: false });
 
 	return (
 		<Popover>
@@ -32,44 +58,35 @@ export function RoomSettings() {
 			<PopoverContent align="end" className="w-72">
 				<p className="font-medium text-sm">Coach</p>
 				<p className="mt-0.5 text-muted-foreground text-xs">
-					Messages with a tip get a small sparkle. Hover them to read it.
+					The coach marks messages the way a person would: an underline for
+					something to fix, a highlight for a phrase worth keeping. Hover a
+					mark to read it.
 				</p>
 				<div className="mt-4 space-y-4">
-					<div className="flex items-center justify-between gap-4">
-						<Label
-							htmlFor={aiId}
-							className="flex-1 flex-col items-start gap-0.5 font-normal"
-						>
-							<span className="text-sm">AI highlights</span>
-							<span className="text-muted-foreground text-xs">
-								Useful phrases from replies
-							</span>
-						</Label>
-						<Switch
-							id={aiId}
-							checked={settings.aiHighlights}
-							onCheckedChange={(v) => updateSettings({ aiHighlights: v })}
-						/>
-					</div>
-					<div className="flex items-center justify-between gap-4">
-						<Label
-							htmlFor={subId}
-							className="flex-1 flex-col items-start gap-0.5 font-normal"
-						>
-							<span className="text-sm">Submission highlights</span>
-							<span className="text-muted-foreground text-xs">
-								Feedback on messages you send
-							</span>
-						</Label>
-						<Switch
-							id={subId}
-							checked={settings.submissionHighlights}
-							onCheckedChange={(v) =>
-								updateSettings({ submissionHighlights: v })
-							}
-						/>
-					</div>
+					<CoachSwitch
+						label="AI highlights"
+						description="Useful phrases from replies"
+						checked={settings.aiHighlights}
+						onCheckedChange={(v) => updateSettings({ aiHighlights: v })}
+					/>
+					<CoachSwitch
+						label="Submission highlights"
+						description="Feedback on messages you send"
+						checked={settings.submissionHighlights}
+						onCheckedChange={(v) => updateSettings({ submissionHighlights: v })}
+					/>
 				</div>
+				{sessionId && (
+					<Button
+						variant="secondary"
+						className="mt-5 w-full"
+						nativeButton={false}
+						render={<Link to="/report/$sessionId" params={{ sessionId }} />}
+					>
+						<Flag />
+						Wrap up & see report
+					</Button>
+				)}
 			</PopoverContent>
 		</Popover>
 	);

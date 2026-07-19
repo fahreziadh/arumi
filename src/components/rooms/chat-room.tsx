@@ -1,19 +1,19 @@
-import { CheckCheck, Sparkles } from "lucide-react";
+import { CheckCheck } from "lucide-react";
 import { useRef } from "react";
+import { CoachMarkedText } from "@/components/coach/marks";
 import { PersonaAvatar, UserAvatar } from "@/components/persona-avatar";
 import {
-	HoverCard,
-	HoverCardContent,
-	HoverCardTrigger,
-} from "@/components/ui/hover-card";
-import { type CoachTip, highlightReply, reviewSubmission } from "@/lib/coach";
+	type CoachTip,
+	rewriteForMessage,
+	tipsForMessage,
+} from "@/lib/coach";
 import { formatDate, formatTime } from "@/lib/intl";
 import { platformTheme } from "@/lib/platform-theme";
 import { useSettings } from "@/lib/settings";
 import type { Conversation } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { CoachTipBody } from "./coach-card";
 import { ChatComposer } from "./composer";
+import { CoachFailedNote, RoomAiError } from "./room-ai-error";
 import { RoomHeader } from "./room-header";
 import { useAutoScroll } from "./use-auto-scroll";
 
@@ -26,15 +26,15 @@ export function ChatRoom({
 	typing: boolean;
 	onSend: (text: string) => void;
 }) {
-	// Composite key: the indicator swapping for a reply must still re-pin.
+	// Includes typing so the indicator swapping for a reply still re-pins.
+	const lastMessage = conversation.messages[conversation.messages.length - 1];
 	const scrollRef = useAutoScroll<HTMLElement>(
-		`${conversation.messages.length}:${typing}`,
+		`${conversation.messages.length}:${typing}:${lastMessage?.text.length ?? 0}`,
 	);
 	const settings = useSettings();
 	const theme = platformTheme[conversation.platform];
 	const flat = theme.chatStyle === "flat";
-	// Messages already on screen when the room opens should not replay their
-	// entrance animation; only genuinely new ones do.
+	// Only genuinely new messages replay the entrance animation.
 	const initialIds = useRef(
 		new Set(conversation.messages.map((m) => m.id)),
 	).current;
@@ -88,15 +88,13 @@ export function ChatRoom({
 							const lastInGroup =
 								conversation.messages[i + 1]?.author !== m.author;
 							const animate = !initialIds.has(m.id);
-							// Tips are pure functions of the text, so they live on the
-							// message itself: hover a sparkle-marked bubble to read one.
-							const tip = isUser
+							const coachOn = isUser
 								? settings.submissionHighlights
-									? reviewSubmission(m.text)
-									: null
-								: settings.aiHighlights
-									? highlightReply(m.text)
-									: null;
+								: settings.aiHighlights;
+							const tips = coachOn ? tipsForMessage(m) : [];
+							const rewrite = rewriteForMessage(m);
+							const analyzing =
+								coachOn && !m.streaming && m.tips === undefined && !m.tipsError;
 							return flat ? (
 								<FlatMessage
 									key={m.id}
@@ -104,9 +102,13 @@ export function ChatRoom({
 									isUser={isUser}
 									grouped={grouped}
 									animate={animate}
+									messageId={m.id}
 									text={m.text}
 									at={m.at}
-									tip={tip}
+									tips={tips}
+									rewrite={rewrite}
+									tipsError={m.tipsError}
+									analyzing={analyzing}
 								/>
 							) : (
 								<BubbleMessage
@@ -116,9 +118,13 @@ export function ChatRoom({
 									grouped={grouped}
 									lastInGroup={lastInGroup}
 									animate={animate}
+									messageId={m.id}
 									text={m.text}
 									at={m.at}
-									tip={tip}
+									tips={tips}
+									rewrite={rewrite}
+									tipsError={m.tipsError}
+									analyzing={analyzing}
 								/>
 							);
 						})}
@@ -161,47 +167,17 @@ export function ChatRoom({
 				</div>
 			</main>
 
+			<RoomAiError
+				conversationId={conversation.id}
+				error={conversation.aiError}
+				className="pb-2"
+			/>
 			<ChatComposer
 				personaName={conversation.persona.name}
 				theme={theme}
 				onSend={onSend}
 			/>
 		</div>
-	);
-}
-
-/** Wraps a message in a hover card when the coach has something to say. */
-function TipHover({
-	tip,
-	isUser,
-	children,
-}: {
-	tip: CoachTip | null;
-	isUser: boolean;
-	children: React.ReactElement;
-}) {
-	if (!tip) return children;
-	return (
-		<HoverCard>
-			<HoverCardTrigger delay={200} render={children} />
-			<HoverCardContent
-				side="top"
-				align={isUser ? "end" : "start"}
-				sideOffset={8}
-				className="w-80"
-			>
-				<CoachTipBody tip={tip} />
-			</HoverCardContent>
-		</HoverCard>
-	);
-}
-
-function TipSparkle() {
-	return (
-		<Sparkles
-			className="size-3 shrink-0 text-amber-500"
-			aria-label="Coach tip available"
-		/>
 	);
 }
 
@@ -236,18 +212,26 @@ function BubbleMessage({
 	grouped,
 	lastInGroup,
 	animate,
+	messageId,
 	text,
 	at,
-	tip,
+	tips,
+	rewrite,
+	tipsError,
+	analyzing,
 }: {
 	conversation: Conversation;
 	isUser: boolean;
 	grouped: boolean;
 	lastInGroup: boolean;
 	animate: boolean;
+	messageId: string;
 	text: string;
 	at: number;
-	tip: CoachTip | null;
+	tips: CoachTip[];
+	rewrite: string | null;
+	tipsError?: string | null;
+	analyzing?: boolean;
 }) {
 	const theme = platformTheme[conversation.platform];
 	const tail = isUser ? theme.tailOut : theme.tailIn;
@@ -263,49 +247,52 @@ function BubbleMessage({
 				grouped ? "mt-1" : "mt-3",
 			)}
 		>
-			<TipHover tip={tip} isUser={isUser}>
-				<div
+			<div
+				className={cn(
+					"relative max-w-[85%] rounded-2xl px-3 py-2 sm:max-w-[75%]",
+					isUser ? theme.bubbleOut : theme.bubbleIn,
+					placement === "top"
+						? showTail
+							? isUser
+								? "rounded-tr-sm"
+								: "rounded-tl-sm"
+							: isUser
+								? "rounded-br-md"
+								: "rounded-bl-md"
+						: showTail && (isUser ? "rounded-br-sm" : "rounded-bl-sm"),
+				)}
+			>
+				{showTail && (
+					<BubbleTail
+						side={isUser ? "out" : "in"}
+						placement={placement}
+						className={tail}
+					/>
+				)}
+				<p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+					<CoachMarkedText
+						text={text}
+						tips={tips}
+						rewrite={rewrite}
+						analyzing={analyzing}
+					/>
+					<CoachFailedNote messageId={messageId} error={tipsError} />
+				</p>
+				<p
 					className={cn(
-						"relative max-w-[85%] rounded-2xl px-3 py-2 sm:max-w-[75%]",
-						isUser ? theme.bubbleOut : theme.bubbleIn,
-						placement === "top"
-							? showTail
-								? isUser
-									? "rounded-tr-sm"
-									: "rounded-tl-sm"
-								: isUser
-									? "rounded-br-md"
-									: "rounded-bl-md"
-							: showTail && (isUser ? "rounded-br-sm" : "rounded-bl-sm"),
+						"mt-0.5 flex items-center justify-end gap-1 text-right text-[10px] tabular-nums",
+						isUser ? theme.bubbleOutMeta : theme.bubbleInMeta,
 					)}
 				>
-					{showTail && (
-						<BubbleTail
-							side={isUser ? "out" : "in"}
-							placement={placement}
-							className={tail}
+					{formatTime(at)}
+					{isUser && theme.checks && (
+						<CheckCheck
+							className={cn("size-3.5", theme.checks)}
+							aria-hidden="true"
 						/>
 					)}
-					<p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-						{text}
-					</p>
-					<p
-						className={cn(
-							"mt-0.5 flex items-center justify-end gap-1 text-right text-[10px] tabular-nums",
-							isUser ? theme.bubbleOutMeta : theme.bubbleInMeta,
-						)}
-					>
-						{tip && <TipSparkle />}
-						{formatTime(at)}
-						{isUser && theme.checks && (
-							<CheckCheck
-								className={cn("size-3.5", theme.checks)}
-								aria-hidden="true"
-							/>
-						)}
-					</p>
-				</div>
-			</TipHover>
+				</p>
+			</div>
 		</div>
 	);
 }
@@ -315,17 +302,25 @@ function FlatMessage({
 	isUser,
 	grouped,
 	animate,
+	messageId,
 	text,
 	at,
-	tip,
+	tips,
+	rewrite,
+	tipsError,
+	analyzing,
 }: {
 	conversation: Conversation;
 	isUser: boolean;
 	grouped: boolean;
 	animate: boolean;
+	messageId: string;
 	text: string;
 	at: number;
-	tip: CoachTip | null;
+	tips: CoachTip[];
+	rewrite: string | null;
+	tipsError?: string | null;
+	analyzing?: boolean;
 }) {
 	const theme = platformTheme[conversation.platform];
 	const name = isUser ? "You" : conversation.persona.name;
@@ -361,23 +356,20 @@ function FlatMessage({
 						</span>
 					</p>
 				)}
-				{/* Flat rows are all left-aligned, so the card always opens from the start edge. */}
-				<TipHover tip={tip} isUser={false}>
-					<p
-						className={cn(
-							"whitespace-pre-wrap break-words text-sm leading-relaxed",
-							!grouped && "mt-0.5",
-						)}
-					>
-						{text}
-						{tip && (
-							<Sparkles
-								className="ml-1.5 inline size-3 text-amber-500"
-								aria-label="Coach tip available"
-							/>
-						)}
-					</p>
-				</TipHover>
+				<p
+					className={cn(
+						"whitespace-pre-wrap break-words text-sm leading-relaxed",
+						!grouped && "mt-0.5",
+					)}
+				>
+					<CoachMarkedText
+						text={text}
+						tips={tips}
+						rewrite={rewrite}
+						analyzing={analyzing}
+					/>
+					<CoachFailedNote messageId={messageId} error={tipsError} />
+				</p>
 			</div>
 		</div>
 	);

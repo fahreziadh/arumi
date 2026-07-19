@@ -1,10 +1,15 @@
 import { Minus, Reply, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { CoachMarkedText } from "@/components/coach/marks";
+import { MarkdownText } from "@/components/markdown-text";
 import { PersonaAvatar, UserAvatar } from "@/components/persona-avatar";
 import { Button } from "@/components/ui/button";
+import { rewriteForMessage, tipsForMessage } from "@/lib/coach";
 import { formatDateTime } from "@/lib/intl";
+import { useSettings } from "@/lib/settings";
 import type { Conversation, Message } from "@/lib/types";
 import { TextareaComposer } from "./composer";
+import { CoachFailedNote, RoomAiError } from "./room-ai-error";
 import { RoomHeader } from "./room-header";
 import { useAutoScroll } from "./use-auto-scroll";
 
@@ -19,17 +24,32 @@ export function EmailRoom({
 }) {
 	const [draft, setDraft] = useState("");
 	const [composerOpen, setComposerOpen] = useState(true);
-	const scrollRef = useAutoScroll<HTMLElement>(conversation.messages.length);
+	const lastMessage = conversation.messages[conversation.messages.length - 1];
+	const scrollRef = useAutoScroll<HTMLElement>(
+		`${conversation.messages.length}:${lastMessage?.text.length ?? 0}`,
+	);
 
 	const lastId = conversation.messages[conversation.messages.length - 1]?.id;
+	// Your own reply must stay expanded even when the persona's answer lands
+	// in the same update, or the coach scan happens inside a collapsed row.
+	const lastUserId = [...conversation.messages]
+		.reverse()
+		.find((m) => m.author === "user")?.id;
 	const [openIds, setOpenIds] = useState<Set<string>>(
 		() => new Set(lastId ? [lastId] : []),
 	);
 	// New messages arrive expanded, like Gmail.
 	useEffect(() => {
-		if (!lastId) return;
-		setOpenIds((prev) => (prev.has(lastId) ? prev : new Set(prev).add(lastId)));
-	}, [lastId]);
+		setOpenIds((prev) => {
+			const wanted = [lastId, lastUserId].filter(
+				(id): id is string => Boolean(id) && !prev.has(id as string),
+			);
+			if (wanted.length === 0) return prev;
+			const next = new Set(prev);
+			for (const id of wanted) next.add(id);
+			return next;
+		});
+	}, [lastId, lastUserId]);
 
 	const toggle = (id: string) => {
 		setOpenIds((prev) => {
@@ -80,7 +100,14 @@ export function EmailRoom({
 								onToggle={() => toggle(m.id)}
 							/>
 						))}
+						{typing && <EmailSkeleton />}
 					</div>
+
+					<RoomAiError
+						conversationId={conversation.id}
+						error={conversation.aiError}
+						className="mt-4 px-0 sm:px-0"
+					/>
 
 					{composerOpen ? (
 						<TextareaComposer
@@ -93,7 +120,6 @@ export function EmailRoom({
 							formLabel="Reply"
 							inputLabel="Your reply"
 							placeholder={`Reply to ${conversation.persona.name}…`}
-							rows={4}
 							hint="⌘↵ to send"
 							submitChildren={
 								<>
@@ -102,7 +128,7 @@ export function EmailRoom({
 								</>
 							}
 							className="vt-composer fade-in slide-in-from-bottom-2 mt-6 animate-in rounded-2xl bg-background p-4 shadow-lg ring-1 ring-foreground/5 duration-200 motion-reduce:animate-none"
-							textareaClassName="mt-2 bg-transparent px-1 focus-visible:bg-transparent"
+							textareaClassName="mt-2 min-h-44 bg-transparent px-1 focus-visible:bg-transparent"
 							header={
 								<div className="flex items-center gap-2.5">
 									<UserAvatar size="sm" />
@@ -152,6 +178,23 @@ export function EmailRoom({
 	);
 }
 
+function EmailSkeleton() {
+	return (
+		<div className="py-1" aria-hidden="true">
+			<div className="flex w-full items-center gap-3 px-2 py-2.5">
+				<div className="size-8 shrink-0 animate-pulse rounded-full bg-muted" />
+				<div className="h-3.5 w-36 animate-pulse rounded-full bg-muted" />
+				<div className="ml-auto h-3 w-24 animate-pulse rounded-full bg-muted/70" />
+			</div>
+			<div className="space-y-2.5 px-2 pt-1 pb-4 pl-[52px]">
+				<div className="h-3 w-full animate-pulse rounded-full bg-muted/70" />
+				<div className="h-3 w-[92%] animate-pulse rounded-full bg-muted/70" />
+				<div className="h-3 w-[65%] animate-pulse rounded-full bg-muted/70" />
+			</div>
+		</div>
+	);
+}
+
 function EmailMessage({
 	message,
 	conversation,
@@ -163,8 +206,16 @@ function EmailMessage({
 	open: boolean;
 	onToggle: () => void;
 }) {
+	const settings = useSettings();
 	const isUser = message.author === "user";
 	const name = isUser ? "You" : conversation.persona.name;
+	const coachOn = isUser
+		? settings.submissionHighlights
+		: settings.aiHighlights;
+	const tips = coachOn ? tipsForMessage(message) : [];
+	const rewrite = rewriteForMessage(message);
+	const analyzing =
+		coachOn && !message.streaming && message.tips === undefined && !message.tipsError;
 
 	return (
 		<article className="py-1">
@@ -201,11 +252,22 @@ function EmailMessage({
 					{formatDateTime(message.at)}
 				</span>
 			</button>
-			{open && (
-				<p className="whitespace-pre-wrap break-words px-2 pt-1 pb-4 pl-[52px] text-sm leading-relaxed">
-					{message.text}
-				</p>
-			)}
+			{open &&
+				(isUser ? (
+					<p className="whitespace-pre-wrap break-words px-2 pt-1 pb-4 pl-[52px] text-sm leading-relaxed">
+						<CoachMarkedText
+							text={message.text}
+							tips={tips}
+							rewrite={rewrite}
+							analyzing={analyzing}
+						/>
+						<CoachFailedNote messageId={message.id} error={message.tipsError} />
+					</p>
+				) : (
+					<div className="break-words px-2 pt-1 pb-4 pl-[52px] text-sm leading-relaxed">
+						<MarkdownText text={message.text} />
+					</div>
+				))}
 		</article>
 	);
 }
