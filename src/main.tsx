@@ -20,14 +20,14 @@ declare module "@tanstack/react-router" {
 	}
 }
 
-// biome-ignore lint/style/noNonNullAssertion: Not sure why
+// biome-ignore lint/style/noNonNullAssertion: #app is always in index.html
 const rootElement = document.getElementById("app")!;
 
-if (!rootElement.innerHTML) {
-	const root = ReactDOM.createRoot(rootElement);
-	root.render(
-		<ConvexAuthProvider client={convex}>
-			<RouterProvider router={router} />
-		</ConvexAuthProvider>,
-	);
-}
+ReactDOM.createRoot(rootElement).render(
+	<ConvexAuthProvider
+		client={convex}
+		replaceURL={(to) => router.history.replace(to)}
+	>
+		<RouterProvider router={router} />
+	</ConvexAuthProvider>,
+);

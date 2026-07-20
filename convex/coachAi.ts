@@ -1,13 +1,17 @@
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { action, type ActionCtx, internalAction } from "./_generated/server";
 import { modelFor } from "./aiConfig";
+import {
+	CATEGORY_PROMPT_LIST,
+	guessCategory,
+	isTipCategory,
+} from "./coachCategories";
 import { chatJson, type TokenUsage } from "./openrouter";
-import { renderPrompt } from "./prompts";
-
-// Coach analysis, stored on the message: fixes/tone/rewrite for learner
-// messages, gem phrases for persona replies. Spans are anchored here from
-// the model's verbatim quotes; models can't count characters.
+import { renderPrompt, withoutLongDashes } from "./prompts";
+import { vCoachTip } from "./schema";
+import { dayKeyOf } from "./stats";
 
 interface RawTip {
 	kind?: string;
@@ -15,21 +19,137 @@ interface RawTip {
 	title?: string;
 	detail?: string;
 	correction?: string;
+	category?: string;
 }
 
 const TIP_KINDS = new Set(["fix", "tip", "tone"]);
 
-// Prefers a whole-word match: "im" must not anchor inside "time".
-function anchor(text: string, quote: string): [number, number] | null {
+/**
+ * Low on purpose. The coach's job is to be consistent: at higher settings it
+ * re-litigates the same register from scratch on every message and ends up
+ * contradicting the advice it gave two messages ago.
+ */
+const COACH_TEMPERATURE = 0.1;
+
+/**
+ * Locates the model's verbatim quote in the text. Models cannot count
+ * characters, so spans are recovered here rather than taken from the model.
+ */
+function spanOfQuote(text: string, quote: string): [number, number] | null {
 	const escaped = quote.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const boundary = new RegExp(
+	const wholeWord = new RegExp(
 		`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`,
 		"u",
 	);
-	const match = boundary.exec(text);
+	const match = wholeWord.exec(text);
 	const start = match ? match.index : text.indexOf(quote);
 	if (start === -1) return null;
 	return [start, start + quote.length];
+}
+
+export type CoachTipValue = Infer<typeof vCoachTip>;
+
+/**
+ * The client renderer walks tips in order against a single cursor, so anything
+ * out of order or overlapping would be dropped there invisibly. Enforce that
+ * contract here, where the drop is deliberate.
+ */
+function inRenderOrder(tips: CoachTipValue[], max: number): CoachTipValue[] {
+	const kept: CoachTipValue[] = [];
+	for (const tip of [...tips].sort((a, b) => a.start - b.start)) {
+		if (kept.length >= max) break;
+		const previous = kept[kept.length - 1];
+		if (previous && tip.start < previous.end) continue;
+		kept.push(tip);
+	}
+	return kept;
+}
+
+/**
+ * The UI swaps a correction in for the quote, so it has to be one wording.
+ * Models like to offer a menu ("Any ideas? / What do you fancy?"); only the
+ * first survives, because a list of options cannot be swapped into a sentence.
+ */
+export function singleCorrection(raw: string | undefined): string | undefined {
+	if (!raw) return undefined;
+	const [first] = withoutLongDashes(raw).split(/\s*\/\s*/);
+	return first.trim() || undefined;
+}
+
+function normalizeTips(
+	text: string,
+	raw: RawTip[] | undefined,
+	max: number,
+): CoachTipValue[] {
+	const anchored = (raw ?? [])
+		.filter((t) =>
+			Boolean(t.quote && t.detail && t.kind && TIP_KINDS.has(t.kind)),
+		)
+		.flatMap((t): CoachTipValue[] => {
+			const span = spanOfQuote(text, t.quote as string);
+			if (!span) return [];
+			const kind = t.kind as "fix" | "tip" | "tone";
+			const title = withoutLongDashes(t.title || "Worth a look").slice(0, 60);
+			return [
+				{
+					kind,
+					start: span[0],
+					end: span[1],
+					title,
+					detail: withoutLongDashes(t.detail as string),
+					quote: t.quote as string,
+					correction: singleCorrection(t.correction),
+					category: isTipCategory(t.category)
+						? t.category
+						: (guessCategory(kind, title) ?? undefined),
+				},
+			];
+		});
+	return inRenderOrder(anchored, max);
+}
+
+function normalizeGems(
+	text: string,
+	raw: RawTip[] | undefined,
+	max: number,
+): CoachTipValue[] {
+	const anchored = (raw ?? [])
+		.filter((g) => Boolean(g.quote && g.detail))
+		.flatMap((g): CoachTipValue[] => {
+			const span = spanOfQuote(text, g.quote as string);
+			if (!span) return [];
+			return [
+				{
+					kind: "gem" as const,
+					start: span[0],
+					end: span[1],
+					title: "Worth stealing",
+					detail: withoutLongDashes(g.detail as string),
+					quote: g.quote as string,
+				},
+			];
+		});
+	return inRenderOrder(anchored, max);
+}
+
+function meaningfulRewrite(text: string, raw: unknown): string | null {
+	if (typeof raw !== "string") return null;
+	const rewrite = withoutLongDashes(raw).trim();
+	if (!rewrite || rewrite === text.trim()) return null;
+	return rewrite;
+}
+
+function renderTranscript(
+	history: Array<{ author: string; text: string }>,
+	personaName: string,
+): string {
+	if (history.length === 0) return "(this is the first message)";
+	return history
+		.map(
+			(m) =>
+				`${m.author === "user" ? "Learner" : personaName}: ${m.text.replace(/\s+/g, " ").slice(0, 400)}`,
+		)
+		.join("\n");
 }
 
 function submissionPrompt(context: {
@@ -37,12 +157,31 @@ function submissionPrompt(context: {
 	platformLabel: string;
 	topic: string;
 	persona: { name: string; role: string };
+	history: Array<{ author: string; text: string }>;
 }): string {
 	return renderPrompt(context.prompts.coachSubmission, {
 		personaName: context.persona.name,
 		personaRole: context.persona.role.toLowerCase(),
 		platformLabel: context.platformLabel,
 		topic: context.topic,
+		categories: CATEGORY_PROMPT_LIST,
+		history: renderTranscript(context.history, context.persona.name),
+	});
+}
+
+function draftPrompt(context: {
+	prompts: { coachDraft: string };
+	platformLabel: string;
+	topic: string;
+	persona: { name: string; role: string };
+	history: Array<{ author: string; text: string }>;
+}): string {
+	return renderPrompt(context.prompts.coachDraft, {
+		personaName: context.persona.name,
+		personaRole: context.persona.role.toLowerCase(),
+		platformLabel: context.platformLabel,
+		topic: context.topic,
+		history: renderTranscript(context.history, context.persona.name),
 	});
 }
 
@@ -55,6 +194,78 @@ function gemsPrompt(context: {
 	});
 }
 
+const MIN_DRAFT_CHARS = 8;
+const MAX_DRAFT_CHARS = 2000;
+const MAX_DRAFT_TIPS = 2;
+const MAX_SUBMISSION_TIPS = 3;
+const MAX_GEMS = 2;
+
+export interface DraftReview {
+	tips: CoachTipValue[];
+	rewrite: string | null;
+}
+
+const EMPTY_REVIEW: DraftReview = { tips: [], rewrite: null };
+
+async function hasQuotaLeft(
+	ctx: ActionCtx,
+	userId: Id<"users">,
+): Promise<boolean> {
+	try {
+		await ctx.runQuery(internal.usage.assertUnderLimit, {
+			userId,
+			dayKey: dayKeyOf(Date.now()),
+		});
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Coaches an unsent draft. Returns its result instead of storing it: a draft
+ * changes on every keystroke, and writing that churn to the message row would
+ * rewrite the document for text that may never be sent.
+ */
+export const reviewDraft = action({
+	args: { conversationId: v.id("conversations"), text: v.string() },
+	handler: async (ctx, args): Promise<DraftReview> => {
+		const text = args.text.trim().slice(0, MAX_DRAFT_CHARS);
+		if (text.length < MIN_DRAFT_CHARS) return EMPTY_REVIEW;
+
+		const context = await ctx.runQuery(internal.conversations.draftContext, {
+			conversationId: args.conversationId,
+		});
+		if (!context) return EMPTY_REVIEW;
+		if (!(await hasQuotaLeft(ctx, context.userId))) return EMPTY_REVIEW;
+
+		const coach = modelFor(context.config, "coach");
+		const result = await chatJson<{ tips?: RawTip[]; rewrite?: string | null }>({
+			...coach,
+			temperature: COACH_TEMPERATURE,
+			label: "coach-draft",
+			onUsage: async (usage: TokenUsage) => {
+				await ctx.runMutation(internal.usage.record, {
+					userId: context.userId,
+					conversationId: context.conversationId,
+					kind: "coach-draft",
+					model: coach.model,
+					...usage,
+				});
+			},
+			messages: [
+				{ role: "system", content: draftPrompt(context) },
+				{ role: "user", content: text },
+			],
+		});
+
+		return {
+			tips: normalizeTips(text, result.tips, MAX_DRAFT_TIPS),
+			rewrite: meaningfulRewrite(text, result.rewrite),
+		};
+	},
+});
+
 export const analyzeMessage = internalAction({
 	args: { messageId: v.id("messages") },
 	handler: async (ctx, args) => {
@@ -64,16 +275,15 @@ export const analyzeMessage = internalAction({
 		if (!context) return;
 		const { message, config } = context;
 		const coach = modelFor(config, "coach");
-		const recordUsage =
-			(kind: string) => async (usage: TokenUsage) => {
-				await ctx.runMutation(internal.usage.record, {
-					userId: context.userId,
-					conversationId: context.conversationId,
-					kind,
-					model: coach.model,
-					...usage,
-				});
-			};
+		const recordUsage = (kind: string) => async (usage: TokenUsage) => {
+			await ctx.runMutation(internal.usage.record, {
+				userId: context.userId,
+				conversationId: context.conversationId,
+				kind,
+				model: coach.model,
+				...usage,
+			});
+		};
 
 		try {
 			if (message.author === "user") {
@@ -82,7 +292,7 @@ export const analyzeMessage = internalAction({
 					rewrite?: string | null;
 				}>({
 					...coach,
-					temperature: 0.3,
+					temperature: COACH_TEMPERATURE,
 					label: "coach-submission",
 					onUsage: recordUsage("coach-submission"),
 					messages: [
@@ -90,43 +300,15 @@ export const analyzeMessage = internalAction({
 						{ role: "user", content: message.text },
 					],
 				});
-				const tips = (result.tips ?? [])
-					.filter(
-						(t): t is Required<Pick<RawTip, "kind" | "quote" | "detail">> &
-							RawTip =>
-							Boolean(t.quote && t.detail && t.kind && TIP_KINDS.has(t.kind)),
-					)
-					.flatMap((t) => {
-						const span = anchor(message.text, t.quote);
-						if (!span) return [];
-						return [
-							{
-								kind: t.kind as "fix" | "tip" | "tone",
-								start: span[0],
-								end: span[1],
-								title: (t.title || "Worth a look").slice(0, 60),
-								detail: t.detail,
-								quote: t.quote,
-								correction: t.correction || undefined,
-							},
-						];
-					})
-					.slice(0, 3);
-				const rewrite =
-					typeof result.rewrite === "string" &&
-					result.rewrite.trim() &&
-					result.rewrite.trim() !== message.text.trim()
-						? result.rewrite.trim()
-						: null;
 				await ctx.runMutation(internal.conversations.storeAnalysis, {
 					messageId: args.messageId,
-					tips,
-					rewrite,
+					tips: normalizeTips(message.text, result.tips, MAX_SUBMISSION_TIPS),
+					rewrite: meaningfulRewrite(message.text, result.rewrite),
 				});
 			} else {
 				const result = await chatJson<{ gems?: RawTip[] }>({
 					...coach,
-					temperature: 0.3,
+					temperature: COACH_TEMPERATURE,
 					label: "coach-gems",
 					onUsage: recordUsage("coach-gems"),
 					messages: [
@@ -134,26 +316,9 @@ export const analyzeMessage = internalAction({
 						{ role: "user", content: message.text },
 					],
 				});
-				const tips = (result.gems ?? [])
-					.filter((g) => Boolean(g.quote && g.detail))
-					.flatMap((g) => {
-						const span = anchor(message.text, g.quote as string);
-						if (!span) return [];
-						return [
-							{
-								kind: "gem" as const,
-								start: span[0],
-								end: span[1],
-								title: "Worth stealing",
-								detail: g.detail as string,
-								quote: g.quote as string,
-							},
-						];
-					})
-					.slice(0, 2);
 				await ctx.runMutation(internal.conversations.storeAnalysis, {
 					messageId: args.messageId,
-					tips,
+					tips: normalizeGems(message.text, result.gems, MAX_GEMS),
 					rewrite: null,
 				});
 			}

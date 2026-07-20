@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.5",
+    "@edge-runtime/vm": "^5.0.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/devtools-vite": "latest",
     "@tanstack/router-cli": "^1.132.0",
@@ -69,6 +70,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "convex-test": "^0.0.54",
     "jsdom": "^28.1.0",
     "typescript": "^6.0.2",
     "vite": "^8.0.0",

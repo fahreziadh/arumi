@@ -14,6 +14,7 @@ import { withDefaults } from "./aiConfig";
 import { personas } from "./personas";
 import { loadPrompts } from "./prompts";
 import { vCoachTip, vPlatform } from "./schema";
+import { analysisDelta, bumpDaily, bumpPlatform, dayKeyOf } from "./stats";
 import { assertUnderDailyLimit, bumpTotals } from "./usage";
 
 async function requireUserId(ctx: QueryCtx | MutationCtx): Promise<Id<"users">> {
@@ -119,6 +120,9 @@ export const create = mutation({
 			typing: true,
 		});
 		await bumpTotals(ctx, userId, { conversations: 1 });
+		const day = dayKeyOf(Date.now());
+		await bumpDaily(ctx, userId, day, { conversations: 1 });
+		await bumpPlatform(ctx, userId, args.platform, { conversations: 1 });
 		await ctx.scheduler.runAfter(0, internal.ai.generateOpener, {
 			conversationId,
 		});
@@ -147,21 +151,31 @@ export const send = mutation({
 	args: {
 		conversationId: v.id("conversations"),
 		text: v.string(),
+		fromCoachRewrite: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const text = args.text.trim();
 		if (!text) return;
 		const conversation = await requireOwned(ctx, args.conversationId);
 		await assertUnderDailyLimit(ctx, conversation.userId);
+		const fromCoachRewrite = args.fromCoachRewrite === true;
 		const messageId = await ctx.db.insert("messages", {
 			conversationId: args.conversationId,
 			author: "user",
 			text,
+			...(fromCoachRewrite
+				? { fromCoachRewrite: true, tips: [], rewrite: null }
+				: {}),
 		});
 		await bumpTotals(ctx, conversation.userId, { messagesSent: 1 });
-		await ctx.scheduler.runAfter(0, internal.coachAi.analyzeMessage, {
-			messageId,
+		await bumpDaily(ctx, conversation.userId, dayKeyOf(Date.now()), {
+			messagesSent: 1,
 		});
+		if (!fromCoachRewrite) {
+			await ctx.scheduler.runAfter(0, internal.coachAi.analyzeMessage, {
+				messageId,
+			});
+		}
 		const lastReply = await ctx.db
 			.query("messages")
 			.withIndex("by_conversation", (q) =>
@@ -322,7 +336,29 @@ export const promptsForActions = internalQuery({
 	handler: async (ctx) => loadPrompts(ctx.db),
 });
 
-/** One message plus the room context the coach needs to judge it. */
+const COACH_HISTORY_MESSAGES = 8;
+
+/**
+ * The exchange leading up to a message, oldest first. Register is a property
+ * of the conversation, not of a sentence, so the coach needs this to avoid
+ * re-deciding what "too casual" means on every message.
+ */
+async function recentHistory(
+	ctx: QueryCtx,
+	conversationId: Id<"conversations">,
+	beforeCreationTime = Number.MAX_SAFE_INTEGER,
+): Promise<Array<{ author: string; text: string }>> {
+	const messages = await ctx.db
+		.query("messages")
+		.withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+		.order("desc")
+		.take(COACH_HISTORY_MESSAGES + 1);
+	return messages
+		.filter((m) => m._creationTime < beforeCreationTime)
+		.reverse()
+		.map((m) => ({ author: m.author, text: m.text }));
+}
+
 export const messageContext = internalQuery({
 	args: { messageId: v.id("messages") },
 	handler: async (ctx, args) => {
@@ -335,6 +371,39 @@ export const messageContext = internalQuery({
 			userId: conversation.userId,
 			conversationId: conversation._id,
 			message: { author: message.author, text: message.text },
+			history: await recentHistory(
+				ctx,
+				conversation._id,
+				message._creationTime,
+			),
+			prompts: await loadPrompts(ctx.db),
+			platformLabel: conversation.platformLabel,
+			topic: conversation.topic,
+			persona: {
+				name: conversation.personaName,
+				role: conversation.personaRole,
+			},
+			config,
+		};
+	},
+});
+
+/**
+ * Returns null rather than throwing when the caller does not own the room, so
+ * a stale composer goes quiet instead of surfacing an error over the input.
+ */
+export const draftContext = internalQuery({
+	args: { conversationId: v.id("conversations") },
+	handler: async (ctx, args) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) return null;
+		const conversation = await ctx.db.get(args.conversationId);
+		if (!conversation || conversation.userId !== userId) return null;
+		const config = withDefaults(await ctx.db.query("aiConfig").first());
+		return {
+			userId,
+			conversationId: conversation._id,
+			history: await recentHistory(ctx, conversation._id),
 			prompts: await loadPrompts(ctx.db),
 			platformLabel: conversation.platformLabel,
 			topic: conversation.topic,
@@ -356,11 +425,32 @@ export const storeAnalysis = internalMutation({
 	handler: async (ctx, args) => {
 		const message = await ctx.db.get(args.messageId);
 		if (!message) return;
+		// Absent tips means never analyzed, not clean. Re-analysis of a message
+		// that already has marks must leave the rollups alone or it double-counts.
+		const alreadyAnalyzed = message.tips !== undefined;
 		await ctx.db.patch(args.messageId, {
 			tips: args.tips,
 			rewrite: args.rewrite,
 			tipsError: undefined,
 		});
+		if (alreadyAnalyzed) return;
+		const conversation = await ctx.db.get(message.conversationId);
+		if (!conversation) return;
+		const { daily, platform } = analysisDelta(message.author, args.tips);
+		await bumpDaily(
+			ctx,
+			conversation.userId,
+			dayKeyOf(message._creationTime),
+			daily,
+		);
+		if (platform.analyzed) {
+			await bumpPlatform(
+				ctx,
+				conversation.userId,
+				conversation.platform,
+				platform,
+			);
+		}
 	},
 });
 

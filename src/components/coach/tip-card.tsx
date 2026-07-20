@@ -21,9 +21,11 @@ export const KIND_DOT: Record<CoachKind, string> = {
 export function CoachTipBody({
 	tip,
 	rewrite,
+	onApplyRewrite,
 }: {
 	tip: CoachTip;
 	rewrite?: string | null;
+	onApplyRewrite?: (text: string) => void;
 }) {
 	const [revealed, setRevealed] = useState(false);
 
@@ -66,6 +68,17 @@ export function CoachTipBody({
 						<p className="mt-1 break-words text-sm leading-relaxed">
 							{rewrite}
 						</p>
+						{onApplyRewrite && (
+							<Button
+								type="button"
+								variant="secondary"
+								size="sm"
+								className="mt-2.5"
+								onClick={() => onApplyRewrite(rewrite)}
+							>
+								Use this
+							</Button>
+						)}
 					</div>
 				) : (
 					<Button

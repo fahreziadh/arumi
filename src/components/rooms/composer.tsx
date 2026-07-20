@@ -1,32 +1,73 @@
 import { ArrowUp, SendHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { CoachedTextarea } from "@/components/coach/marked-field";
 import { LimitNotice } from "@/components/rooms/limit-notice";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import type { PlatformTheme } from "@/lib/platform-theme";
 import { useDailyLimit } from "@/lib/use-daily-limit";
+import { useDraftCoach } from "@/lib/use-draft-coach";
 import { cn } from "@/lib/utils";
 
+/** Grows with its content up to a cap, then scrolls. */
+const CAPPED_GROWING_FIELD_CLASS = "max-h-40 min-h-11 rounded-3xl px-4 py-2.5";
+
+function isSendKey(event: React.KeyboardEvent) {
+	return event.key === "Enter" && !event.shiftKey;
+}
+
+function isModifierSendKey(event: React.KeyboardEvent) {
+	return (event.metaKey || event.ctrlKey) && event.key === "Enter";
+}
+
+export interface SendOptions {
+	/** The text is the coach's own rewrite, adopted unchanged. */
+	fromCoachRewrite: boolean;
+}
+
+/**
+ * Tracks whether what is about to be sent is still the coach's wording. Any
+ * edit after adopting it makes the message the learner's own again.
+ */
+function useAdoptedRewrite(apply: (text: string) => void) {
+	const [adopted, setAdopted] = useState<string | null>(null);
+	return {
+		adopted,
+		adopt: (text: string) => {
+			setAdopted(text.trim());
+			apply(text);
+		},
+		release: () => setAdopted(null),
+		sendOptions: (text: string): SendOptions => ({
+			fromCoachRewrite: adopted !== null && adopted === text.trim(),
+		}),
+	};
+}
+
 export function ChatComposer({
+	conversationId,
 	personaName,
 	theme,
 	onSend,
 }: {
+	conversationId: string;
 	personaName: string;
 	theme: PlatformTheme;
-	onSend: (text: string) => void;
+	onSend: (text: string, options: SendOptions) => void;
 }) {
 	const [draft, setDraft] = useState("");
 	const limit = useDailyLimit();
+	const rewrite = useAdoptedRewrite(setDraft);
+	const coach = useDraftCoach(conversationId, draft, rewrite.adopted);
 
 	const submit = (e: React.FormEvent) => {
 		e.preventDefault();
 		const text = draft.trim();
 		if (!text) return;
+		const options = rewrite.sendOptions(text);
 		setDraft("");
-		onSend(text);
+		rewrite.release();
+		onSend(text, options);
 	};
 
 	if (limit?.limited) {
@@ -46,15 +87,24 @@ export function ChatComposer({
 				className="vt-composer mx-auto w-full max-w-2xl px-4 py-3 sm:px-6"
 				aria-label="Send a message"
 			>
-				<div className="flex items-center gap-2">
-					<Input
+				<div className="flex items-end gap-2">
+					<CoachedTextarea
+						coach={coach}
+						onApplyRewrite={rewrite.adopt}
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
+						onKeyDown={(e) => {
+							if (isSendKey(e)) {
+								e.preventDefault();
+								e.currentTarget.form?.requestSubmit();
+							}
+						}}
+						rows={1}
 						placeholder={`Message ${personaName}…`}
 						aria-label="Your message"
 						autoComplete="off"
 						autoFocus
-						className={cn("h-11 rounded-full px-4", theme.composerInput)}
+						className={cn(CAPPED_GROWING_FIELD_CLASS, theme.composerInput)}
 					/>
 					<Button
 						type="submit"
@@ -72,6 +122,7 @@ export function ChatComposer({
 }
 
 export function TextareaComposer({
+	conversationId,
 	value,
 	onValueChange,
 	onSubmit,
@@ -87,9 +138,10 @@ export function TextareaComposer({
 	textareaClassName,
 	className,
 }: {
+	conversationId: string;
 	value: string;
 	onValueChange: (value: string) => void;
-	onSubmit: () => void;
+	onSubmit: (options: SendOptions) => void;
 	formLabel: string;
 	inputLabel: string;
 	placeholder: string;
@@ -103,11 +155,15 @@ export function TextareaComposer({
 	className?: string;
 }) {
 	const limit = useDailyLimit();
+	const rewrite = useAdoptedRewrite(onValueChange);
+	const coach = useDraftCoach(conversationId, value, rewrite.adopted);
 
 	const submit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!value.trim()) return;
-		onSubmit();
+		const options = rewrite.sendOptions(value);
+		rewrite.release();
+		onSubmit(options);
 	};
 
 	if (limit?.limited) {
@@ -121,11 +177,13 @@ export function TextareaComposer({
 	return (
 		<form onSubmit={submit} aria-label={formLabel} className={className}>
 			{header}
-			<Textarea
+			<CoachedTextarea
+				coach={coach}
+				onApplyRewrite={rewrite.adopt}
 				value={value}
 				onChange={(e) => onValueChange(e.target.value)}
 				onKeyDown={(e) => {
-					if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+					if (isModifierSendKey(e)) {
 						e.currentTarget.form?.requestSubmit();
 					}
 				}}

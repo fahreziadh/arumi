@@ -16,6 +16,48 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- Boot splash: overlays the app until the router commits its first
+         real render (removed in src/routes/__root.tsx). -->
+    <div
+      id="splash"
+      style="
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        pointer-events: none;
+        transition: opacity 250ms ease;
+      "
+    >
+      <style>
+        #splash svg {
+          width: 80px;
+          height: 80px;
+        }
+        @media (min-width: 640px) {
+          #splash svg {
+            width: 112px;
+            height: 112px;
+          }
+        }
+      </style>
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path
+          fill="#FFD94A"
+          d="M16 5h16c6.6 0 12 5.4 12 12v7c0 6.6-5.4 12-12 12H21.5l-8.9 6.9c-1.1.85-2.7-.1-2.5-1.5l.85-5.9C6.4 33.8 4 30.2 4 24v-7C4 10.4 9.4 5 16 5Z"
+        />
+        <circle cx="24" cy="12" r="2.9" fill="#1A1A1A" />
+        <path
+          d="M24 19v9.25"
+          fill="none"
+          stroke="#1A1A1A"
+          stroke-width="4.5"
+          stroke-linecap="round"
+        />
+      </svg>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
 	internalMutation,
 	internalQuery,
@@ -8,7 +8,7 @@ import {
 	query,
 	type QueryCtx,
 } from "./_generated/server";
-import { withDefaults } from "./aiConfig";
+import { type AiConfig, withDefaults } from "./aiConfig";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -55,10 +55,37 @@ export async function bumpTotals(
 	else await ctx.db.insert("usageTotals", next);
 }
 
+/** Grants one user their own daily quota; null hands them back the global one. */
+export async function setDailyLimitOverride(
+	ctx: MutationCtx,
+	userId: Id<"users">,
+	limit: number | null,
+): Promise<void> {
+	const existing = await totalsFor(ctx, userId);
+	if (existing) {
+		await ctx.db.patch(existing._id, {
+			dailyMessageLimit: limit ?? undefined,
+		});
+		return;
+	}
+	if (limit === null) return;
+	await ctx.db.insert("usageTotals", {
+		userId,
+		...ZERO,
+		lastActiveAt: Date.now(),
+		dailyMessageLimit: limit,
+	});
+}
+
 function limitReachedError(limit: number): Error {
 	return new Error(
-		`You've used all ${limit} free messages for today. They reset at midnight UTC.`,
+		`You've used all ${limit} free messages for today. They reset at midnight UTC, or ask for more at https://x.com/fahreziadhaa.`,
 	);
+}
+
+/** A per-user grant, when the admin has made one, otherwise the global quota. */
+function limitFor(config: AiConfig, row: Doc<"usageTotals"> | null): number {
+	return row?.dailyMessageLimit ?? config.dailyMessageLimit;
 }
 
 async function assertUnder(
@@ -67,9 +94,9 @@ async function assertUnder(
 	dayKey: number,
 ): Promise<void> {
 	const config = withDefaults(await ctx.db.query("aiConfig").first());
-	const limit = config.dailyMessageLimit;
-	if (limit <= 0) return;
 	const row = await totalsFor(ctx, userId);
+	const limit = limitFor(config, row);
+	if (limit <= 0) return;
 	const used = row && row.dayKey === dayKey ? (row.messagesToday ?? 0) : 0;
 	if (used >= limit) throw limitReachedError(limit);
 }
@@ -104,7 +131,7 @@ export const mine = query({
 		const row = await totalsFor(ctx, userId);
 		return {
 			/** 0 = unlimited. */
-			limit: config.dailyMessageLimit,
+			limit: limitFor(config, row),
 			dayKey: row?.dayKey ?? null,
 			messagesToday: row?.messagesToday ?? 0,
 		};

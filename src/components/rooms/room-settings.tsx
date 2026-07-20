@@ -59,10 +59,16 @@ export function RoomSettings() {
 				<p className="font-medium text-sm">Coach</p>
 				<p className="mt-0.5 text-muted-foreground text-xs">
 					The coach marks messages the way a person would: an underline for
-					something to fix, a highlight for a phrase worth keeping. Hover a
-					mark to read it.
+					something to fix, a highlight for a phrase worth keeping. Hover a mark
+					to read it.
 				</p>
 				<div className="mt-4 space-y-4">
+					<CoachSwitch
+						label="Live coach"
+						description="Checks your draft as you type"
+						checked={settings.liveCoach}
+						onCheckedChange={(v) => updateSettings({ liveCoach: v })}
+					/>
 					<CoachSwitch
 						label="AI highlights"
 						description="Useful phrases from replies"

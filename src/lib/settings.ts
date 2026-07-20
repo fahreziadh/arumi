@@ -7,11 +7,14 @@ export interface Settings {
 	aiHighlights: boolean;
 	/** Mark up messages you send with fixes and tone checks. */
 	submissionHighlights: boolean;
+	/** Coach the draft as you type, a moment after you stop. */
+	liveCoach: boolean;
 }
 
 const defaults: Settings = {
 	aiHighlights: true,
 	submissionHighlights: true,
+	liveCoach: true,
 };
 
 function load(): Settings {

@@ -9,6 +9,7 @@ import {
 	type QueryCtx,
 } from "./_generated/server";
 import { DEFAULT_AI_CONFIG, withDefaults } from "./aiConfig";
+import { setDailyLimitOverride } from "./usage";
 
 // Admin = the one account matching the ADMIN_EMAIL env var.
 async function adminEmail(ctx: QueryCtx | MutationCtx): Promise<string | null> {
@@ -23,7 +24,9 @@ async function adminEmail(ctx: QueryCtx | MutationCtx): Promise<string | null> {
 	return user.email;
 }
 
-async function requireAdmin(ctx: QueryCtx | MutationCtx): Promise<void> {
+export async function requireAdmin(
+	ctx: QueryCtx | MutationCtx,
+): Promise<void> {
 	if (!(await adminEmail(ctx))) throw new Error("Unauthorized");
 }
 
@@ -151,6 +154,8 @@ export const usageOverview = query({
 				lastActiveAt: t?.lastActiveAt ?? null,
 				dayKey: t?.dayKey ?? null,
 				messagesToday: t?.messagesToday ?? 0,
+				/** null = this user follows the global daily limit. */
+				limitOverride: t?.dailyMessageLimit ?? null,
 			};
 		});
 		rows.sort(
@@ -161,6 +166,25 @@ export const usageOverview = query({
 			dailyMessageLimit: withDefaults(config).dailyMessageLimit,
 			users: rows,
 		};
+	},
+});
+
+export const setUserDailyLimit = mutation({
+	args: {
+		userId: v.id("users"),
+		/** 0 = unlimited, null = follow the global limit. */
+		limit: v.union(v.number(), v.null()),
+	},
+	handler: async (ctx, args) => {
+		await requireAdmin(ctx);
+		if (
+			args.limit !== null &&
+			(!Number.isInteger(args.limit) || args.limit < 0)
+		) {
+			throw new Error("Daily message limit must be a whole number, 0 or more");
+		}
+		if (!(await ctx.db.get(args.userId))) throw new Error("No such user");
+		await setDailyLimitOverride(ctx, args.userId, args.limit);
 	},
 });
 

@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { modelFor } from "./aiConfig";
 import { chatJson } from "./openrouter";
-import { renderPrompt } from "./prompts";
+import { renderPrompt, withoutLongDashes } from "./prompts";
 import { vPlatform } from "./schema";
 import { DAY_MS } from "./usage";
 
@@ -97,16 +97,100 @@ export const next = action({
 		if (result.clear && result.topic?.trim()) {
 			return {
 				done: true,
-				topic: result.topic.trim(),
+				topic: withoutLongDashes(result.topic).trim(),
 				partnerName: result.partnerName?.trim() || undefined,
-				partnerRole: result.partnerRole?.trim() || undefined,
+				partnerRole:
+					withoutLongDashes(result.partnerRole ?? "").trim() || undefined,
 			};
 		}
 		if (!outOfQuestions && result.question?.trim()) {
-			return { done: false, question: result.question.trim() };
+			return {
+				done: false,
+				question: withoutLongDashes(result.question).trim(),
+			};
 		}
 		throw new Error(
 			"The model did not return a usable step (expected a question or a topic)",
 		);
+	},
+});
+
+interface RefineResult {
+	topic: string;
+	partnerName: string;
+	partnerRole: string;
+}
+
+/** Applies a free-text change request to a prepared scenario. */
+export const refine = action({
+	args: {
+		platformLabel: v.string(),
+		topic: v.string(),
+		personaName: v.string(),
+		personaRole: v.string(),
+		instruction: v.string(),
+	},
+	handler: async (ctx, args): Promise<RefineResult> => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) throw new Error("Not authenticated");
+		const instruction = args.instruction.trim();
+		if (!instruction) throw new Error("Describe what you want to change");
+		await ctx.runQuery(internal.usage.assertUnderLimit, {
+			userId,
+			dayKey: Math.floor(Date.now() / DAY_MS),
+		});
+
+		const config = await ctx.runQuery(
+			internal.conversations.aiConfigForActions,
+		);
+		const prompts = await ctx.runQuery(
+			internal.conversations.promptsForActions,
+		);
+
+		const slot = modelFor(config, "prepare");
+		const result = await chatJson<{
+			topic?: string;
+			partnerName?: string;
+			partnerRole?: string;
+		}>({
+			...slot,
+			temperature: 0.4,
+			label: "prepare",
+			onUsage: async (usage) => {
+				await ctx.runMutation(internal.usage.record, {
+					userId,
+					kind: "prepare",
+					model: slot.model,
+					...usage,
+				});
+			},
+			messages: [
+				{
+					role: "system",
+					content: renderPrompt(prompts.prepareRefine, {
+						platformLabel: args.platformLabel,
+					}),
+				},
+				{
+					role: "user",
+					content: [
+						`Current scenario: ${args.topic}`,
+						`Current partner: ${args.personaName || "(unnamed)"}, ${args.personaRole || "conversation partner"}`,
+						`Change request: ${instruction}`,
+					].join("\n"),
+				},
+			],
+		});
+
+		if (!result.topic?.trim()) {
+			throw new Error("The model did not return an updated scenario");
+		}
+		return {
+			topic: withoutLongDashes(result.topic).trim(),
+			partnerName: result.partnerName?.trim() || args.personaName,
+			partnerRole:
+				withoutLongDashes(result.partnerRole ?? "").trim() ||
+				args.personaRole,
+		};
 	},
 });

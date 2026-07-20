@@ -8,7 +8,7 @@ import { rewriteForMessage, tipsForMessage } from "@/lib/coach";
 import { formatDateTime } from "@/lib/intl";
 import { useSettings } from "@/lib/settings";
 import type { Conversation, Message } from "@/lib/types";
-import { TextareaComposer } from "./composer";
+import { type SendOptions, TextareaComposer } from "./composer";
 import { CoachFailedNote, RoomAiError } from "./room-ai-error";
 import { RoomHeader } from "./room-header";
 import { useAutoScroll } from "./use-auto-scroll";
@@ -20,7 +20,7 @@ export function EmailRoom({
 }: {
 	conversation: Conversation;
 	typing: boolean;
-	onSend: (text: string) => void;
+	onSend: (text: string, options: SendOptions) => void;
 }) {
 	const [draft, setDraft] = useState("");
 	const [composerOpen, setComposerOpen] = useState(true);
@@ -111,10 +111,11 @@ export function EmailRoom({
 
 					{composerOpen ? (
 						<TextareaComposer
+							conversationId={conversation.id}
 							value={draft}
 							onValueChange={setDraft}
-							onSubmit={() => {
-								onSend(draft.trim());
+							onSubmit={(options) => {
+								onSend(draft.trim(), options);
 								setDraft("");
 							}}
 							formLabel="Reply"
@@ -215,7 +216,10 @@ function EmailMessage({
 	const tips = coachOn ? tipsForMessage(message) : [];
 	const rewrite = rewriteForMessage(message);
 	const analyzing =
-		coachOn && !message.streaming && message.tips === undefined && !message.tipsError;
+		coachOn &&
+		!message.streaming &&
+		message.tips === undefined &&
+		!message.tipsError;
 
 	return (
 		<article className="py-1">

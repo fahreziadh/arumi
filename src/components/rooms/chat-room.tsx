@@ -2,17 +2,13 @@ import { CheckCheck } from "lucide-react";
 import { useRef } from "react";
 import { CoachMarkedText } from "@/components/coach/marks";
 import { PersonaAvatar, UserAvatar } from "@/components/persona-avatar";
-import {
-	type CoachTip,
-	rewriteForMessage,
-	tipsForMessage,
-} from "@/lib/coach";
+import { type CoachTip, rewriteForMessage, tipsForMessage } from "@/lib/coach";
 import { formatDate, formatTime } from "@/lib/intl";
 import { platformTheme } from "@/lib/platform-theme";
 import { useSettings } from "@/lib/settings";
 import type { Conversation } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ChatComposer } from "./composer";
+import { ChatComposer, type SendOptions } from "./composer";
 import { CoachFailedNote, RoomAiError } from "./room-ai-error";
 import { RoomHeader } from "./room-header";
 import { useAutoScroll } from "./use-auto-scroll";
@@ -24,7 +20,7 @@ export function ChatRoom({
 }: {
 	conversation: Conversation;
 	typing: boolean;
-	onSend: (text: string) => void;
+	onSend: (text: string, options: SendOptions) => void;
 }) {
 	// Includes typing so the indicator swapping for a reply still re-pins.
 	const lastMessage = conversation.messages[conversation.messages.length - 1];
@@ -173,6 +169,7 @@ export function ChatRoom({
 				className="pb-2"
 			/>
 			<ChatComposer
+				conversationId={conversation.id}
 				personaName={conversation.persona.name}
 				theme={theme}
 				onSend={onSend}

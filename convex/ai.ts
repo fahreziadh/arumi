@@ -4,7 +4,8 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, internalAction } from "./_generated/server";
 import { modelFor } from "./aiConfig";
 import { type ChatMessage, chatStream } from "./openrouter";
-import { renderPrompt } from "./prompts";
+import { LENGTH_RULE, roomKindFor } from "./platformStyle";
+import { renderPrompt, withoutLongDashes } from "./prompts";
 
 const FLUSH_MS = 150;
 
@@ -37,6 +38,7 @@ function personaSystem(context: ReplyContext): string {
 		personaRole: context.persona.role.toLowerCase(),
 		platformLabel: context.platformLabel,
 		topic: context.topic,
+		lengthRule: LENGTH_RULE[roomKindFor(context.platform)],
 		extra: context.config.systemPrompt,
 	});
 }
@@ -50,7 +52,8 @@ async function streamPersonaMessage(
 ): Promise<void> {
 	let messageId: Id<"messages"> | null = null;
 	const renders = context.platform === "email" || context.platform === "github";
-	const clean = (text: string) => (renders ? text : toPlainChat(text));
+	const clean = (text: string) =>
+		withoutLongDashes(renders ? text : toPlainChat(text));
 	const slot = modelFor(context.config, "persona");
 	try {
 		let lastFlush = 0;

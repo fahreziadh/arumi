@@ -23,6 +23,18 @@ export function LimitNotice({
 			<p className="mt-1 text-muted-foreground text-xs">
 				More {resetLabel(resetAt)}. Everything you wrote stays right here.
 			</p>
+			<p className="mt-2 text-muted-foreground text-xs">
+				Need them sooner?{" "}
+				<a
+					href="https://x.com/fahreziadhaa"
+					target="_blank"
+					rel="noreferrer"
+					className="font-medium text-foreground underline underline-offset-4"
+				>
+					Ping me on X
+				</a>{" "}
+				and I'll raise your limit.
+			</p>
 		</output>
 	);
 }

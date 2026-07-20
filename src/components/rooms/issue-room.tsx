@@ -7,7 +7,7 @@ import { rewriteForMessage, tipsForMessage } from "@/lib/coach";
 import { formatDateTime } from "@/lib/intl";
 import { useSettings } from "@/lib/settings";
 import type { Conversation } from "@/lib/types";
-import { TextareaComposer } from "./composer";
+import { type SendOptions, TextareaComposer } from "./composer";
 import { CoachFailedNote, RoomAiError } from "./room-ai-error";
 import { RoomHeader } from "./room-header";
 import { useAutoScroll } from "./use-auto-scroll";
@@ -34,7 +34,7 @@ export function IssueRoom({
 }: {
 	conversation: Conversation;
 	typing: boolean;
-	onSend: (text: string) => void;
+	onSend: (text: string, options: SendOptions) => void;
 }) {
 	const [draft, setDraft] = useState("");
 	const lastMessage = conversation.messages[conversation.messages.length - 1];
@@ -139,10 +139,11 @@ export function IssueRoom({
 					className="pt-3"
 				/>
 				<TextareaComposer
+					conversationId={conversation.id}
 					value={draft}
 					onValueChange={setDraft}
-					onSubmit={() => {
-						onSend(draft.trim());
+					onSubmit={(options) => {
+						onSend(draft.trim(), options);
 						setDraft("");
 					}}
 					formLabel="Add a comment"

@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SessionSessionIdRouteImport } from './routes/session.$sessionId'
 import { Route as ReportSessionIdRouteImport } from './routes/report.$sessionId'
 import { Route as PrepareUseCaseRouteImport } from './routes/prepare.$useCase'
 
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -44,6 +50,7 @@ const PrepareUseCaseRoute = PrepareUseCaseRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/profile': typeof ProfileRoute
   '/prepare/$useCase': typeof PrepareUseCaseRoute
   '/report/$sessionId': typeof ReportSessionIdRoute
   '/session/$sessionId': typeof SessionSessionIdRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/profile': typeof ProfileRoute
   '/prepare/$useCase': typeof PrepareUseCaseRoute
   '/report/$sessionId': typeof ReportSessionIdRoute
   '/session/$sessionId': typeof SessionSessionIdRoute
@@ -59,6 +67,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/profile': typeof ProfileRoute
   '/prepare/$useCase': typeof PrepareUseCaseRoute
   '/report/$sessionId': typeof ReportSessionIdRoute
   '/session/$sessionId': typeof SessionSessionIdRoute
@@ -68,6 +77,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/profile'
     | '/prepare/$useCase'
     | '/report/$sessionId'
     | '/session/$sessionId'
@@ -75,6 +85,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/profile'
     | '/prepare/$useCase'
     | '/report/$sessionId'
     | '/session/$sessionId'
@@ -82,6 +93,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/profile'
     | '/prepare/$useCase'
     | '/report/$sessionId'
     | '/session/$sessionId'
@@ -90,6 +102,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  ProfileRoute: typeof ProfileRoute
   PrepareUseCaseRoute: typeof PrepareUseCaseRoute
   ReportSessionIdRoute: typeof ReportSessionIdRoute
   SessionSessionIdRoute: typeof SessionSessionIdRoute
@@ -97,6 +110,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin': {
       id: '/admin'
       path: '/admin'
@@ -138,6 +158,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  ProfileRoute: ProfileRoute,
   PrepareUseCaseRoute: PrepareUseCaseRoute,
   ReportSessionIdRoute: ReportSessionIdRoute,
   SessionSessionIdRoute: SessionSessionIdRoute,

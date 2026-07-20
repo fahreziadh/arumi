@@ -199,6 +199,17 @@ html:active-view-transition-type(prep-step)::view-transition-new(root) {
   animation: vt-exit 120ms ease both;
 }
 
+/* Ready-made scenarios accompany only the first question. */
+.prep-templates {
+  view-transition-name: prep-templates;
+}
+::view-transition-new(prep-templates):only-child {
+  animation: vt-enter 200ms ease both;
+}
+::view-transition-old(prep-templates):only-child {
+  animation: vt-exit 120ms ease both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-old(*),
@@ -237,6 +248,28 @@ html:active-view-transition-type(prep-step)::view-transition-new(root) {
   }
 }
 
+/* Scenario rows cascade in once, like the coach's words. */
+@keyframes template-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: none;
+  }
+}
+.template-in {
+  animation: template-in 0.35s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .template-in {
+    animation: none;
+  }
+}
+
 /* While the coach reads a message, a highlighter stripe sweeps the text. */
 @keyframes coach-scan {
   from {
@@ -265,6 +298,31 @@ html:active-view-transition-type(prep-step)::view-transition-new(root) {
   .coach-scan {
     animation: none;
     background-image: none;
+  }
+}
+
+/* "Reads well so far": fades in, holds, fades itself out. */
+@keyframes coach-praise {
+  0% {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  12%,
+  75% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+.coach-praise {
+  animation: coach-praise 2.6s ease-in-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-praise {
+    animation: none;
   }
 }
 

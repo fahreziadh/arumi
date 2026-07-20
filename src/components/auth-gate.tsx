@@ -7,6 +7,7 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { siGoogle } from "simple-icons";
+import { LoadingScreen } from "@/components/loading-screen";
 import { InklishMark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 
@@ -56,7 +57,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 	return (
 		<>
 			<AuthLoading>
-				<div className="h-dvh" />
+				<LoadingScreen />
 			</AuthLoading>
 			<Unauthenticated>
 				<SignInScreen />

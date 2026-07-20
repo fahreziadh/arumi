@@ -161,7 +161,14 @@ export async function chatStream(
 	if (!trimmed) throw noTextError(options.model, finish, reasoned);
 	if (options.label) {
 		console.log(
-			`${options.label}: first token ${firstTokenAt - startedAt}ms, total ${Date.now() - startedAt}ms, ${trimmed.length} chars, ${options.model}, thinking=${options.reasoning || "default"}`,
+			`${options.label}: first token ${firstTokenAt - startedAt}ms, total ${Date.now() - startedAt}ms, ${trimmed.length} chars, finish=${finish}, ${options.model}, thinking=${options.reasoning || "default"}`,
+		);
+	}
+	// A capped response is a sentence that stops mid-word. Failing here shows
+	// the learner a retry instead of a permanent fragment in the transcript.
+	if (finish === "length") {
+		throw new Error(
+			`Model "${options.model}" hit its output cap and the reply was cut off. Try again, or pick a different model in /admin.`,
 		);
 	}
 	return trimmed;

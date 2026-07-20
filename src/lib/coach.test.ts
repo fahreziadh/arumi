@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	type CoachTip,
+	draftMarks,
 	rewriteForMessage,
 	summarizeSession,
 	tipsForMessage,
@@ -77,5 +78,33 @@ describe("summarizeSession score", () => {
 		);
 		expect(sent).toBe(1);
 		expect(score).toBe(100);
+	});
+});
+
+describe("draftMarks", () => {
+	const review = (reviewedText: string, tips: CoachTip[]) => ({
+		reviewedText,
+		tips,
+	});
+
+	it("returns tips unchanged when the draft has no leading whitespace", () => {
+		expect(draftMarks("idk yet", review("idk yet", [fix]))).toEqual([fix]);
+	});
+
+	it("shifts spans past leading whitespace the coach never saw", () => {
+		const marks = draftMarks("\n  idk yet", review("idk yet", [fix]));
+		expect(marks).toEqual([{ ...fix, start: 3, end: 6 }]);
+	});
+
+	it("keeps marks while only trailing whitespace is added", () => {
+		expect(draftMarks("idk yet  ", review("idk yet", [fix]))).toEqual([fix]);
+	});
+
+	it("drops every mark once the draft text itself changes", () => {
+		expect(draftMarks("idk yet more", review("idk yet", [fix]))).toEqual([]);
+	});
+
+	it("has nothing to place when the coach found nothing", () => {
+		expect(draftMarks("idk yet", review("idk yet", []))).toEqual([]);
 	});
 });

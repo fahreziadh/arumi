@@ -1,6 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
-import { ArrowLeft, ArrowUp, Pencil } from "lucide-react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import {
+	ArrowLeft,
+	ArrowRight,
+	ArrowUp,
+	Pencil,
+	RotateCcw,
+} from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { RequireAuth } from "@/components/auth-gate";
@@ -10,7 +16,16 @@ import { PlatformIcon } from "@/components/platform-icon";
 import { PlatformTile } from "@/components/platform-tile";
 import { LimitNotice } from "@/components/rooms/limit-notice";
 import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { platformTheme } from "@/lib/platform-theme";
 import { getUseCase } from "@/lib/use-cases";
 import { useDailyLimit } from "@/lib/use-daily-limit";
@@ -70,6 +85,13 @@ function withTransition(apply: () => void) {
 	}
 }
 
+/** What a picked template or a finished interview boils down to. */
+interface ScenarioPick {
+	topic: string;
+	personaName: string;
+	personaRole: string;
+}
+
 function PrepareFlow() {
 	const { useCase } = Route.useParams();
 	const navigate = useNavigate();
@@ -77,6 +99,18 @@ function PrepareFlow() {
 	const createConversation = useMutation(api.conversations.create);
 	const [starting, setStarting] = useState(false);
 	const limit = useDailyLimit();
+
+	const templates = useQuery(
+		api.templates.forPlatform,
+		found ? { platform: found.platform } : "skip",
+	);
+	const [picked, setPicked] = useState<ScenarioPick | null>(null);
+
+	const refine = useAction(api.prepare.refine);
+	const [editOpen, setEditOpen] = useState(false);
+	const [editDraft, setEditDraft] = useState("");
+	const [editBusy, setEditBusy] = useState(false);
+	const [editError, setEditError] = useState<string | null>(null);
 
 	const prep = usePreparation(
 		found?.platform ?? "custom",
@@ -124,6 +158,28 @@ function PrepareFlow() {
 
 	const theme = platformTheme[found.platform];
 
+	// One confirmation screen serves both paths: a picked template or a
+	// finished interview.
+	const ready = picked
+		? {
+				topic: picked.topic,
+				partner:
+					picked.personaName && picked.personaRole
+						? { name: picked.personaName, role: picked.personaRole }
+						: null,
+			}
+		: prep.done
+			? { topic: prep.topic, partner: prep.partner }
+			: null;
+
+	// The list only accompanies the very first question; once the learner
+	// starts answering (or picks a template), the interview owns the screen.
+	// Layout keys off the step alone, never off the list: `templates` is
+	// undefined until the query lands, and letting that decide would settle
+	// the page centered and then jerk it upward when the rows arrive.
+	const templateList = templates ?? [];
+	const onFirstQuestion = !ready && prep.stepCount === 1;
+
 	const submit = (e: React.FormEvent) => {
 		e.preventDefault();
 		const text = draft.trim();
@@ -133,16 +189,49 @@ function PrepareFlow() {
 		inputRef.current?.focus();
 	};
 
+	// The AI applies the requested change; the result lands in `picked`, so
+	// it works the same whether the scenario came from a template or the
+	// interview (and Back returns to the unedited version).
+	const applyEdit = async () => {
+		if (!ready || editBusy) return;
+		const instruction = editDraft.trim();
+		if (!instruction) return;
+		setEditBusy(true);
+		setEditError(null);
+		try {
+			const revised = await refine({
+				platformLabel: prep.platformLabel,
+				topic: ready.topic,
+				personaName: ready.partner?.name ?? "",
+				personaRole: ready.partner?.role ?? "",
+				instruction,
+			});
+			withTransition(() =>
+				setPicked({
+					topic: revised.topic,
+					personaName: revised.partnerName,
+					personaRole: revised.partnerRole,
+				}),
+			);
+			setEditOpen(false);
+			setEditDraft("");
+		} catch (err) {
+			setEditError(err instanceof Error ? err.message : "Something went wrong");
+		} finally {
+			setEditBusy(false);
+		}
+	};
+
 	const start = async () => {
-		if (starting) return;
+		if (starting || !ready) return;
 		setStarting(true);
 		try {
 			const id = await createConversation({
 				platform: found.platform,
 				platformLabel: prep.platformLabel,
-				topic: prep.topic,
-				personaName: prep.partner?.name,
-				personaRole: prep.partner?.role,
+				topic: ready.topic,
+				personaName: ready.partner?.name,
+				personaRole: ready.partner?.role,
 			});
 			await navigate({
 				to: "/session/$sessionId",
@@ -168,29 +257,39 @@ function PrepareFlow() {
 				</Button>
 				<PlatformTile platform={found.platform} size="sm" morph />
 				<span className="font-medium text-sm">{found.label}</span>
-				<span className="ml-auto pr-2">
-					<span className="sr-only">
-						Step {Math.min(prep.stepCount, MAX_FOLLOW_UPS + 1)} of{" "}
-						{MAX_FOLLOW_UPS + 1}
+				{/* Step dots only make sense while the interview is running. */}
+				{!picked && (
+					<span className="ml-auto pr-2">
+						<span className="sr-only">
+							Step {Math.min(prep.stepCount, MAX_FOLLOW_UPS + 1)} of{" "}
+							{MAX_FOLLOW_UPS + 1}
+						</span>
+						<span className="flex items-center gap-1" aria-hidden>
+							{Array.from({ length: MAX_FOLLOW_UPS + 1 }, (_, i) => (
+								<span
+									// biome-ignore lint/suspicious/noArrayIndexKey: fixed-size dots
+									key={i}
+									className={cn(
+										"size-1.5 rounded-full",
+										i < prep.stepCount ? "bg-foreground" : "bg-border",
+									)}
+								/>
+							))}
+						</span>
 					</span>
-					<span className="flex items-center gap-1" aria-hidden>
-						{Array.from({ length: MAX_FOLLOW_UPS + 1 }, (_, i) => (
-							<span
-								// biome-ignore lint/suspicious/noArrayIndexKey: fixed-size dots
-								key={i}
-								className={cn(
-									"size-1.5 rounded-full",
-									i < prep.stepCount ? "bg-foreground" : "bg-border",
-								)}
-							/>
-						))}
-					</span>
-				</span>
+				)}
 			</header>
 
 			<main className="flex-1 overflow-y-auto overscroll-contain">
-				{/* pb compensates the question zone's reserved space: optical center. */}
-				<div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 pb-36 sm:px-6">
+				{/* On the first question the flow starts high, leaving room for
+				    the template list; afterwards the question zone sits at the
+				    optical center (pb compensates its reserved space). */}
+				<div
+					className={cn(
+						"mx-auto flex min-h-full w-full max-w-2xl flex-col px-4 sm:px-6",
+						onFirstQuestion ? "pt-4 pb-16 sm:pt-6" : "justify-center pb-36",
+					)}
+				>
 					<h1 className="sr-only">Prepare your {found.label} session</h1>
 
 					{/* min-h keeps the input still between steps. */}
@@ -198,7 +297,7 @@ function PrepareFlow() {
 						aria-live="polite"
 						className="prep-question flex min-h-36 items-end justify-center"
 					>
-						{!prep.done && (
+						{!ready && (
 							<div className="coach-bubble relative mb-2 w-full max-w-md rounded-2xl rounded-bl-sm bg-popover px-5 py-4 shadow-[0_8px_30px_rgb(0,0,0,0.06),0_2px_6px_rgb(0,0,0,0.03)]">
 								<svg
 									viewBox="0 0 8 12"
@@ -256,7 +355,7 @@ function PrepareFlow() {
 								</div>
 							</div>
 						)}
-						{prep.done && (
+						{ready && (
 							<div className="text-center">
 								<span
 									className={cn(
@@ -274,60 +373,104 @@ function PrepareFlow() {
 									className={cn(
 										"mx-auto mt-4 text-balance text-center font-semibold tracking-tight",
 										// Long summaries trade size for width, keeping ~2 lines.
-										prep.topic.length > 90
+										ready.topic.length > 90
 											? "text-xl sm:text-2xl"
 											: "text-2xl sm:text-3xl",
 									)}
 								>
-									{prep.topic}
+									{ready.topic}
 								</p>
-								{prep.partner && (
+								{ready.partner && (
 									<p className="mt-3 text-muted-foreground text-sm">
 										You'll be writing with{" "}
 										<span className="font-medium text-foreground">
-											{prep.partner.name}
+											{ready.partner.name}
 										</span>
-										, {prep.partner.role.toLowerCase()}
+										, {ready.partner.role.toLowerCase()}
 									</p>
 								)}
 							</div>
 						)}
 					</div>
 
-					{!prep.done && (
-						<form
-							onSubmit={submit}
-							className="vt-composer mx-auto mt-5 w-full max-w-xl"
-							aria-label="Answer the question"
-						>
-							<div className="relative">
-								{/* Never disabled: that would eject focus on every AI turn. */}
-								<Input
-									ref={inputRef}
-									value={draft}
-									onChange={(e) => setDraft(e.target.value)}
-									placeholder={
-										prep.thinking ? "One moment…" : "Type your answer…"
-									}
-									aria-label="Your answer"
-									autoComplete="off"
-									autoFocus
-									className="h-14 rounded-full pr-16 pl-6 text-base"
-								/>
-								<Button
-									type="submit"
-									size="icon"
-									aria-label="Send answer"
-									disabled={!draft.trim() || prep.thinking}
-									className="-translate-y-1/2 absolute top-1/2 right-2.5 rounded-full"
-								>
-									<ArrowUp />
-								</Button>
-							</div>
-						</form>
+					{!ready && (
+						<>
+							<form
+								onSubmit={submit}
+								className="vt-composer mx-auto mt-5 w-full max-w-xl"
+								aria-label="Answer the question"
+							>
+								<div className="relative">
+									{/* Never disabled: that would eject focus on every AI turn. */}
+									<Input
+										ref={inputRef}
+										value={draft}
+										onChange={(e) => setDraft(e.target.value)}
+										placeholder={
+											prep.thinking ? "One moment…" : "Type your answer…"
+										}
+										aria-label="Your answer"
+										autoComplete="off"
+										autoFocus
+										className="h-14 rounded-full pr-16 pl-6 text-base"
+									/>
+									<Button
+										type="submit"
+										size="icon"
+										aria-label="Send answer"
+										disabled={!draft.trim() || prep.thinking}
+										className="-translate-y-1/2 absolute top-1/2 right-2.5 rounded-full"
+									>
+										<ArrowUp />
+									</Button>
+								</div>
+							</form>
+							{/* Matches the composer's width and text inset, so the
+							    divider, the input and the rows share one edge. */}
+							{onFirstQuestion && templateList.length > 0 && (
+								<div className="prep-templates mx-auto mt-10 w-full max-w-xl">
+									<h2 className="px-6 text-muted-foreground text-sm">
+										Or start from a ready-made scenario
+									</h2>
+									<ul className="mt-2">
+										{templateList.map((template, i) => (
+											<li
+												key={template.title}
+												className="template-in"
+												// Cascade the first few, then land the rest together.
+												style={{ animationDelay: `${Math.min(i * 45, 270)}ms` }}
+											>
+												<button
+													type="button"
+													onClick={() =>
+														withTransition(() => setPicked(template))
+													}
+													className="group flex w-full items-center gap-3 rounded-2xl px-6 py-3 text-left outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98]"
+												>
+													<span className="min-w-0 flex-1">
+														<span className="block truncate font-medium text-base">
+															{template.title}
+														</span>
+														<span className="mt-0.5 block truncate text-muted-foreground text-sm">
+															{template.description}
+														</span>
+													</span>
+													{/* Visible at rest so the rows keep a right edge
+													    under the composer, not just on hover. */}
+													<ArrowRight
+														className="size-4 shrink-0 text-muted-foreground opacity-30 transition-[opacity,transform] duration-150 ease-out group-focus-visible:translate-x-0.5 group-focus-visible:opacity-100 group-hover:translate-x-0.5 group-hover:opacity-100"
+														aria-hidden="true"
+													/>
+												</button>
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
+						</>
 					)}
 
-					{prep.done && (
+					{ready && (
 						<div className="prep-actions mt-8 flex justify-center gap-2">
 							<Button
 								size="lg"
@@ -336,14 +479,80 @@ function PrepareFlow() {
 							>
 								{starting ? "Starting…" : "Start session"}
 							</Button>
-							<Button size="lg" variant="ghost" onClick={prep.restart}>
+							<Button
+								size="lg"
+								variant="ghost"
+								onClick={() => {
+									setEditError(null);
+									setEditOpen(true);
+								}}
+							>
 								<Pencil />
 								Edit
 							</Button>
+							{picked ? (
+								<Button
+									size="lg"
+									variant="ghost"
+									onClick={() => withTransition(() => setPicked(null))}
+								>
+									<ArrowLeft />
+									Back
+								</Button>
+							) : (
+								<Button size="lg" variant="ghost" onClick={prep.restart}>
+									<RotateCcw />
+									Start over
+								</Button>
+							)}
 						</div>
 					)}
 				</div>
 			</main>
+
+			<Dialog open={editOpen} onOpenChange={setEditOpen}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Change the scenario</DialogTitle>
+						<DialogDescription>
+							Tell the coach what to change; everything else stays as it is.
+						</DialogDescription>
+					</DialogHeader>
+					<form
+						className="grid gap-4"
+						onSubmit={(e) => {
+							e.preventDefault();
+							void applyEdit();
+						}}
+					>
+						<Textarea
+							value={editDraft}
+							onChange={(e) => setEditDraft(e.target.value)}
+							rows={3}
+							autoFocus
+							placeholder='e.g. "One week instead of two" or "Make the manager harder to convince"'
+							aria-label="What do you want to change?"
+							className="text-base"
+						/>
+						{editError && (
+							<p className="text-destructive text-sm">{editError}</p>
+						)}
+						<DialogFooter>
+							<Button
+								type="button"
+								variant="ghost"
+								disabled={editBusy}
+								onClick={() => setEditOpen(false)}
+							>
+								Cancel
+							</Button>
+							<Button type="submit" disabled={editBusy || !editDraft.trim()}>
+								{editBusy ? "Updating…" : "Update scenario"}
+							</Button>
+						</DialogFooter>
+					</form>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

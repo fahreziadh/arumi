@@ -1,7 +1,6 @@
+import { messageQuality } from "../../convex/coachScore";
 import type { Conversation, Message } from "./types";
 
-// Marks: fix = red, tip = amber, tone = purple, gem = yellow highlight.
-// All analysis is server-side AI stored on the message; this module reads it.
 export type CoachKind = "fix" | "tip" | "tone" | "gem";
 
 export interface CoachTip {
@@ -17,7 +16,7 @@ export interface CoachTip {
 	correction?: string;
 }
 
-// Absent = not analyzed yet, [] = analyzed and clean.
+/** Absent = not analyzed yet, [] = analyzed and clean. */
 export function tipsForMessage(message: Pick<Message, "tips">): CoachTip[] {
 	return message.tips ?? [];
 }
@@ -29,15 +28,28 @@ export function rewriteForMessage(
 	return message.rewrite ?? null;
 }
 
-// Each sent message starts at 100 and loses points per mark, floored at 40:
-// a rough message still communicated. The score is the average.
-const MARK_PENALTY: Record<CoachKind, number> = {
-	fix: 15,
-	tone: 10,
-	tip: 5,
-	gem: 0,
-};
-const MESSAGE_FLOOR = 40;
+/**
+ * Live-coach tips, mapped from the trimmed draft the coach reviewed onto the
+ * raw text still sitting in the composer. Returns nothing once the draft has
+ * moved on: a mark on the wrong characters is worse than no mark at all.
+ */
+export function draftMarks(
+	draft: string,
+	review: { tips: CoachTip[]; reviewedText: string },
+): CoachTip[] {
+	if (review.tips.length === 0 || draft.trim() !== review.reviewedText) {
+		return [];
+	}
+	// The coach only ever sees the trimmed draft, so every span is short by
+	// whatever whitespace the learner left in front of it.
+	const leadingWhitespace = draft.length - draft.trimStart().length;
+	if (leadingWhitespace === 0) return review.tips;
+	return review.tips.map((tip) => ({
+		...tip,
+		start: tip.start + leadingWhitespace,
+		end: tip.end + leadingWhitespace,
+	}));
+}
 
 export interface SessionInsights {
 	/** Messages the learner sent. */
@@ -70,10 +82,7 @@ export function summarizeSession(conversation: Conversation): SessionInsights {
 			sent++;
 			if (tips.length === 0) clean++;
 			if (!tips.some((t) => t.kind === "tone")) toneClean++;
-			qualitySum += Math.max(
-				MESSAGE_FLOOR,
-				tips.reduce((q, t) => q - MARK_PENALTY[t.kind], 100),
-			);
+			qualitySum += messageQuality(tips);
 			for (const tip of tips) {
 				const key = `${tip.title}:${tip.quote.toLowerCase()}`;
 				if (seenPractice.has(key)) continue;

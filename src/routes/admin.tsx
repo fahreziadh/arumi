@@ -1,17 +1,32 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { ArrowUpRight, Check, ChevronDown, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+	ArrowUpRight,
+	Check,
+	ChevronDown,
+	GripVertical,
+	Plus,
+	RefreshCw,
+	Trash2,
+	X,
+} from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { RequireAuth } from "@/components/auth-gate";
+import { LoadingScreen } from "@/components/loading-screen";
 import { NotFoundState } from "@/components/not-found-state";
+import { PlatformTile } from "@/components/platform-tile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import type { Platform } from "@/lib/types";
+import { useCases } from "@/lib/use-cases";
 import { cn } from "@/lib/utils";
 import { api } from "../../convex/_generated/api";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type {
 	CreditsInfo,
 	ModelInfo,
@@ -30,7 +45,7 @@ function AdminPage() {
 
 function AdminGate() {
 	const isAdmin = useQuery(api.admin.isAdmin);
-	if (isAdmin === undefined) return <div className="h-dvh" />;
+	if (isAdmin === undefined) return <LoadingScreen />;
 	if (!isAdmin) {
 		return (
 			<NotFoundState
@@ -160,6 +175,7 @@ const ADMIN_TABS = [
 	{ key: "analytics", label: "Analytics" },
 	{ key: "settings", label: "AI settings" },
 	{ key: "prompts", label: "Prompts" },
+	{ key: "templates", label: "Templates" },
 ] as const;
 
 type AdminTab = (typeof ADMIN_TABS)[number]["key"];
@@ -172,7 +188,7 @@ function AdminPanel() {
 			<main className="mx-auto max-w-2xl px-4 pt-6 pb-16 sm:px-6">
 				<h1 className="font-bold text-2xl tracking-tight">Admin</h1>
 				<p className="mt-1 text-muted-foreground text-sm">
-					Usage, models, and prompts. Users never see any of this.
+					Usage, models, prompts, and templates. Users never see any of this.
 				</p>
 				<nav aria-label="Admin sections" className="mt-5 flex flex-wrap gap-1">
 					{ADMIN_TABS.map((option) => (
@@ -202,6 +218,9 @@ function AdminPanel() {
 				<div className={cn(tab !== "prompts" && "hidden")}>
 					<PromptsSection />
 				</div>
+				<div className={cn(tab !== "templates" && "hidden")}>
+					<TemplatesSection />
+				</div>
 			</main>
 		</div>
 	);
@@ -222,6 +241,7 @@ interface UsageRow {
 	lastActiveAt: number | null;
 	dayKey: number | null;
 	messagesToday: number;
+	limitOverride: number | null;
 }
 
 function AnalyticsTab() {
@@ -283,9 +303,39 @@ function UsersSection({
 	limit: number;
 }) {
 	const todayKey = Math.floor(Date.now() / 86_400_000);
+	const rebuild = useMutation(api.stats.rebuild);
+	const [rebuilding, setRebuilding] = useState(false);
+
+	/**
+	 * Recomputes every daily and per-platform rollup from the messages already
+	 * stored. Clears first, so running it twice cannot double-count, and needs
+	 * no AI: the marks were saved when the coach originally ran.
+	 */
+	function RebuildStatsButton() {
+		return (
+			<Button
+				variant="secondary"
+				size="sm"
+				disabled={rebuilding}
+				onClick={() => {
+					setRebuilding(true);
+					void rebuild({}).finally(() =>
+						// The work continues in scheduled batches after the call
+						// resolves; the delay just stops double-clicks.
+						window.setTimeout(() => setRebuilding(false), 3000),
+					);
+				}}
+			>
+				{rebuilding ? "Rebuilding…" : "Rebuild stats"}
+			</Button>
+		);
+	}
 	return (
 		<section aria-label="Users" className="mt-8">
-			<h2 className="font-semibold text-lg tracking-tight">Users</h2>
+			<div className="flex items-center justify-between gap-3">
+				<h2 className="font-semibold text-lg tracking-tight">Users</h2>
+				<RebuildStatsButton />
+			</div>
 			{users === undefined ? (
 				<p className="mt-3 text-muted-foreground text-sm">Loading…</p>
 			) : users.length === 0 ? (
@@ -296,7 +346,7 @@ function UsersSection({
 				<div className="mt-2">
 					<div className="flex items-center gap-3 border-border/60 border-b py-2 text-muted-foreground text-xs">
 						<span className="flex-1">User</span>
-						<span className="w-14 text-right">Today</span>
+						<span className="w-24 pr-2.5 text-right">Today</span>
 						<span className="w-14 text-right">Convos</span>
 						<span className="w-16 text-right">Tokens</span>
 						<span className="w-16 text-right">Spent</span>
@@ -326,7 +376,7 @@ function UserRow({
 }) {
 	const usedToday = user.dayKey === todayKey ? user.messagesToday : 0;
 	return (
-		<div className="flex items-center gap-3 py-3">
+		<div className="-mx-2 group/user flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-muted/40">
 			{user.image ? (
 				<img
 					src={user.image}
@@ -355,15 +405,12 @@ function UserRow({
 						.join(" · ")}
 				</span>
 			</span>
-			<span
-				className={cn(
-					"w-14 text-right text-sm tabular-nums",
-					usedToday === 0 && "text-muted-foreground",
-				)}
-				title="Messages sent today against the daily limit"
-			>
-				{limit > 0 ? `${usedToday}/${limit}` : usedToday.toLocaleString()}
-			</span>
+			<DailyLimitCell
+				userId={user.id}
+				usedToday={usedToday}
+				override={user.limitOverride}
+				globalLimit={limit}
+			/>
 			<span
 				className="w-14 text-right text-sm tabular-nums"
 				title={`${user.messagesSent.toLocaleString()} messages sent all-time`}
@@ -379,6 +426,106 @@ function UserRow({
 			<span className="w-16 text-right font-medium text-sm tabular-nums">
 				{formatCost(user.cost)}
 			</span>
+		</div>
+	);
+}
+
+/**
+ * Today's usage, and the click target for granting this user a bigger quota
+ * than everyone else. An empty field hands them back the global limit.
+ */
+function DailyLimitCell({
+	userId,
+	usedToday,
+	override,
+	globalLimit,
+}: {
+	userId: string;
+	usedToday: number;
+	override: number | null;
+	globalLimit: number;
+}) {
+	const setLimit = useMutation(api.admin.setUserDailyLimit);
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState("");
+	const [error, setError] = useState<string | null>(null);
+
+	const limit = override ?? globalLimit;
+
+	function save() {
+		const trimmed = draft.trim();
+		const next = trimmed === "" ? null : Number(trimmed);
+		if (next !== null && (!Number.isInteger(next) || next < 0)) {
+			setError("Whole number, 0 or more");
+			return;
+		}
+		setEditing(false);
+		void setLimit({ userId: userId as Id<"users">, limit: next }).catch(
+			(cause: Error) => setError(cause.message),
+		);
+	}
+
+	if (editing) {
+		return (
+			<div className="flex w-24 justify-end">
+				<Input
+					autoFocus
+					inputMode="numeric"
+					aria-label="Daily message limit for this user"
+					placeholder={String(globalLimit)}
+					className="h-7 w-20 rounded-full px-3 text-right text-sm tabular-nums"
+					value={draft}
+					onChange={(event) => setDraft(event.target.value)}
+					onBlur={save}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") save();
+						if (event.key === "Escape") setEditing(false);
+					}}
+				/>
+			</div>
+		);
+	}
+
+	const atLimit = limit > 0 && usedToday >= limit;
+	return (
+		<div className="flex w-24 justify-end">
+			<button
+				type="button"
+				className={cn(
+					"flex h-7 items-center gap-1.5 rounded-full border border-transparent px-2.5 text-sm tabular-nums transition-colors",
+					"group-hover/user:border-border hover:bg-muted focus-visible:border-ring focus-visible:outline-none",
+					atLimit
+						? "border-destructive/25 bg-destructive/5 text-destructive"
+						: usedToday === 0 && "text-muted-foreground",
+				)}
+				title={
+					error ??
+					(override === null
+						? "Messages sent today. Click to give this user their own daily limit."
+						: `Custom limit: ${override === 0 ? "unlimited" : override} a day. Clear the field to follow the global limit.`)
+				}
+				onClick={() => {
+					setError(null);
+					setDraft(override === null ? "" : String(override));
+					setEditing(true);
+				}}
+			>
+				{override !== null && (
+					<span
+						aria-hidden="true"
+						className={cn(
+							"size-1.5 rounded-full",
+							atLimit ? "bg-destructive" : "bg-foreground/70",
+						)}
+					/>
+				)}
+				<span>
+					{usedToday}
+					<span className={cn(!atLimit && "text-muted-foreground")}>
+						/{limit > 0 ? limit : "∞"}
+					</span>
+				</span>
+			</button>
 		</div>
 	);
 }
@@ -1402,6 +1549,410 @@ function ModelFact({ label, value }: { label: string; value: string }) {
 		<div>
 			<dt className="text-muted-foreground text-xs">{label}</dt>
 			<dd className="mt-0.5 font-medium text-sm tabular-nums">{value}</dd>
+		</div>
+	);
+}
+
+type TemplateRow = Doc<"scenarioTemplates">;
+
+function TemplatesSection() {
+	const templates = useQuery(api.templates.listForAdmin);
+	const seedDefaults = useMutation(api.templates.seedDefaults);
+	const [seeding, setSeeding] = useState(false);
+	const [seedError, setSeedError] = useState<string | null>(null);
+	/** Platform whose "add template" editor is open, if any. */
+	const [addingTo, setAddingTo] = useState<Platform | null>(null);
+
+	if (templates === undefined) {
+		return <p className="mt-6 text-muted-foreground text-sm">Loading…</p>;
+	}
+
+	const empty = templates.length === 0;
+
+	const seed = async () => {
+		setSeeding(true);
+		setSeedError(null);
+		try {
+			await seedDefaults({});
+		} catch (err) {
+			setSeedError(err instanceof Error ? err.message : "Could not load");
+		} finally {
+			setSeeding(false);
+		}
+	};
+
+	return (
+		<section aria-label="Scenario templates" className="mt-6">
+			<p className="text-muted-foreground text-sm">
+				Ready-made scenarios learners can pick on the prepare page instead of
+				answering the setup questions. Empty persona fields fall back to the
+				platform's default persona.
+			</p>
+			{empty && (
+				<div className="mt-5 rounded-2xl bg-muted/40 p-4">
+					<p className="text-sm">
+						Learners currently see the built-in starter set. Load it here to
+						edit, reorder, or hide individual templates.
+					</p>
+					<div className="mt-3 flex items-center gap-3">
+						<Button size="sm" disabled={seeding} onClick={() => void seed()}>
+							{seeding ? "Loading…" : "Load starter set"}
+						</Button>
+						{seedError && (
+							<span className="text-destructive text-sm">{seedError}</span>
+						)}
+					</div>
+				</div>
+			)}
+			<div className="mt-6 space-y-8">
+				{useCases.map((useCase) => {
+					// Custom rooms are always self-described; no templates there.
+					if (useCase.platform === "custom") return null;
+					const rows = templates.filter((t) => t.platform === useCase.platform);
+					return (
+						<div key={useCase.platform}>
+							<div className="flex items-center gap-2.5">
+								<PlatformTile platform={useCase.platform} size="sm" />
+								<h3 className="flex-1 font-medium text-sm">{useCase.label}</h3>
+								<Button
+									size="sm"
+									variant="ghost"
+									className="text-muted-foreground"
+									disabled={addingTo === useCase.platform}
+									onClick={() => setAddingTo(useCase.platform)}
+								>
+									<Plus />
+									Add
+								</Button>
+							</div>
+							<div className="mt-2 space-y-2">
+								{rows.length === 0 &&
+									!empty &&
+									addingTo !== useCase.platform && (
+										<p className="px-1 text-muted-foreground text-xs">
+											No templates; learners go straight to the setup questions.
+										</p>
+									)}
+								<TemplateList rows={rows} />
+								{addingTo === useCase.platform && (
+									<TemplateEditor
+										platform={useCase.platform}
+										onClose={() => setAddingTo(null)}
+									/>
+								)}
+							</div>
+						</div>
+					);
+				})}
+			</div>
+		</section>
+	);
+}
+
+/**
+ * Templates for one platform, reorderable by dragging the grip handle. While a
+ * drag is in flight the order is kept locally so the row follows the cursor;
+ * the mutation lands on drop and the local copy is dropped with it.
+ */
+function TemplateList({ rows }: { rows: TemplateRow[] }) {
+	const reorder = useMutation(api.templates.reorder);
+	const [dragId, setDragId] = useState<TemplateRow["_id"] | null>(null);
+	const [localIds, setLocalIds] = useState<TemplateRow["_id"][] | null>(null);
+
+	const byId = new Map(rows.map((row) => [row._id, row]));
+	const ordered =
+		localIds
+			?.map((id) => byId.get(id))
+			.filter((row): row is TemplateRow => Boolean(row)) ?? rows;
+
+	const startDrag = (id: TemplateRow["_id"]) => {
+		setDragId(id);
+		setLocalIds(ordered.map((row) => row._id));
+	};
+
+	/** Slots the dragged row into `index` as the cursor passes each card. */
+	const dragOver = (index: number) => {
+		if (!dragId) return;
+		setLocalIds((ids) => {
+			if (!ids) return ids;
+			const from = ids.indexOf(dragId);
+			if (from === -1 || from === index) return ids;
+			const next = [...ids];
+			next.splice(index, 0, ...next.splice(from, 1));
+			return next;
+		});
+	};
+
+	const endDrag = () => {
+		const id = dragId;
+		const toIndex = localIds?.indexOf(id as TemplateRow["_id"]) ?? -1;
+		setDragId(null);
+		setLocalIds(null);
+		if (id && toIndex !== -1) void reorder({ id, toIndex });
+	};
+
+	/** Keyboard equivalent of a drag, so reordering isn't mouse-only. */
+	const nudge = (index: number, delta: number) => {
+		const row = ordered[index];
+		const toIndex = index + delta;
+		if (!row || toIndex < 0 || toIndex >= ordered.length) return;
+		void reorder({ id: row._id, toIndex });
+	};
+
+	return (
+		<ul className="space-y-2">
+			{ordered.map((row, index) => (
+				<TemplateCard
+					key={row._id}
+					template={row}
+					isDragging={dragId === row._id}
+					onDragStart={() => startDrag(row._id)}
+					onDragOver={() => dragOver(index)}
+					onDragEnd={endDrag}
+					onNudge={(delta) => nudge(index, delta)}
+				/>
+			))}
+		</ul>
+	);
+}
+
+function TemplateCard({
+	template,
+	isDragging,
+	onDragStart,
+	onDragOver,
+	onDragEnd,
+	onNudge,
+}: {
+	template: TemplateRow;
+	isDragging: boolean;
+	onDragStart: () => void;
+	onDragOver: () => void;
+	onDragEnd: () => void;
+	onNudge: (delta: number) => void;
+}) {
+	const setEnabled = useMutation(api.templates.setEnabled);
+	const [open, setOpen] = useState(false);
+	// Only a grab on the handle arms the drag; the rest of the card stays a
+	// normal click target for expanding and text selection.
+	const [armed, setArmed] = useState(false);
+
+	return (
+		<li
+			draggable={armed}
+			onDragStart={onDragStart}
+			onDragEnd={() => {
+				setArmed(false);
+				onDragEnd();
+			}}
+			onDragOver={(event) => {
+				event.preventDefault();
+				onDragOver();
+			}}
+			className={cn(
+				"rounded-2xl bg-muted/40 transition-opacity",
+				!template.enabled && "opacity-60",
+				isDragging && "opacity-40",
+			)}
+		>
+			<div className="flex items-center gap-1 py-1 pr-3 pl-1">
+				<button
+					type="button"
+					aria-label={`Reorder ${template.title}`}
+					onPointerDown={() => setArmed(true)}
+					onPointerUp={() => setArmed(false)}
+					onKeyDown={(event) => {
+						if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+						event.preventDefault();
+						onNudge(event.key === "ArrowUp" ? -1 : 1);
+					}}
+					className="flex size-8 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:text-foreground active:cursor-grabbing"
+				>
+					<GripVertical className="size-4" aria-hidden="true" />
+				</button>
+				<button
+					type="button"
+					onClick={() => setOpen((v) => !v)}
+					aria-expanded={open}
+					className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 text-left"
+				>
+					<span className="min-w-0 flex-1">
+						<span className="block truncate font-medium text-sm">
+							{template.title}
+						</span>
+						<span className="block truncate text-muted-foreground text-xs">
+							{template.description || template.topic}
+						</span>
+					</span>
+					<ChevronDown
+						className={cn(
+							"size-4 shrink-0 text-muted-foreground transition-transform",
+							open && "rotate-180",
+						)}
+						aria-hidden="true"
+					/>
+				</button>
+				<Switch
+					checked={template.enabled}
+					onCheckedChange={(checked) =>
+						void setEnabled({ id: template._id, enabled: checked })
+					}
+					aria-label={`Show ${template.title} to learners`}
+					className="ml-2"
+				/>
+			</div>
+			{open && (
+				<TemplateEditor
+					template={template}
+					platform={template.platform}
+					onClose={() => setOpen(false)}
+				/>
+			)}
+		</li>
+	);
+}
+
+/** Edits an existing template, or creates one when `template` is absent. */
+function TemplateEditor({
+	template,
+	platform,
+	onClose,
+}: {
+	template?: TemplateRow;
+	platform: Platform;
+	onClose: () => void;
+}) {
+	const save = useMutation(api.templates.save);
+	const removeTemplate = useMutation(api.templates.remove);
+	const ids = useId();
+	const [title, setTitle] = useState(template?.title ?? "");
+	const [description, setDescription] = useState(template?.description ?? "");
+	const [topic, setTopic] = useState(template?.topic ?? "");
+	const [personaName, setPersonaName] = useState(template?.personaName ?? "");
+	const [personaRole, setPersonaRole] = useState(template?.personaRole ?? "");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [confirmDelete, setConfirmDelete] = useState(false);
+
+	const submit = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			await save({
+				id: template?._id,
+				platform,
+				title,
+				description,
+				topic,
+				personaName,
+				personaRole,
+			});
+			onClose();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not save");
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div
+			className={cn(
+				"space-y-3 px-4 pb-4",
+				template
+					? "border-border/60 border-t pt-3"
+					: "rounded-2xl bg-muted/40 pt-4",
+			)}
+		>
+			<div className="grid gap-3 sm:grid-cols-2">
+				<div>
+					<Label htmlFor={`${ids}-title`}>Title</Label>
+					<Input
+						id={`${ids}-title`}
+						value={title}
+						onChange={(e) => setTitle(e.target.value)}
+						placeholder="Follow up after a job interview"
+						className="mt-1.5 bg-background"
+					/>
+				</div>
+				<div>
+					<Label htmlFor={`${ids}-description`}>Hint</Label>
+					<Input
+						id={`${ids}-description`}
+						value={description}
+						onChange={(e) => setDescription(e.target.value)}
+						placeholder="One line shown under the title"
+						className="mt-1.5 bg-background"
+					/>
+				</div>
+			</div>
+			<div>
+				<Label htmlFor={`${ids}-topic`}>Scenario</Label>
+				<Textarea
+					id={`${ids}-topic`}
+					value={topic}
+					onChange={(e) => setTopic(e.target.value)}
+					rows={3}
+					placeholder="From the learner's point of view: what's the situation, and what do they want?"
+					className="mt-1.5 bg-background text-sm leading-relaxed focus-visible:bg-background"
+				/>
+			</div>
+			<div className="grid gap-3 sm:grid-cols-2">
+				<div>
+					<Label htmlFor={`${ids}-personaName`}>Partner name</Label>
+					<Input
+						id={`${ids}-personaName`}
+						value={personaName}
+						onChange={(e) => setPersonaName(e.target.value)}
+						placeholder="Sarah Lin"
+						className="mt-1.5 bg-background"
+					/>
+				</div>
+				<div>
+					<Label htmlFor={`${ids}-personaRole`}>Partner role</Label>
+					<Input
+						id={`${ids}-personaRole`}
+						value={personaRole}
+						onChange={(e) => setPersonaRole(e.target.value)}
+						placeholder="Hiring manager at the company"
+						className="mt-1.5 bg-background"
+					/>
+				</div>
+			</div>
+			<div className="flex items-center gap-3 pt-1">
+				<Button size="sm" disabled={busy} onClick={() => void submit()}>
+					{busy ? "Saving…" : template ? "Save" : "Add template"}
+				</Button>
+				<Button
+					size="sm"
+					variant="ghost"
+					className="text-muted-foreground"
+					onClick={onClose}
+				>
+					Cancel
+				</Button>
+				{error && <span className="text-destructive text-sm">{error}</span>}
+				{template &&
+					(confirmDelete ? (
+						<Button
+							size="sm"
+							variant="destructive"
+							className="ml-auto"
+							onClick={() => void removeTemplate({ id: template._id })}
+						>
+							Really delete?
+						</Button>
+					) : (
+						<Button
+							size="sm"
+							variant="ghost"
+							className="ml-auto text-muted-foreground"
+							onClick={() => setConfirmDelete(true)}
+						>
+							<Trash2 />
+							Delete
+						</Button>
+					))}
+			</div>
 		</div>
 	);
 }

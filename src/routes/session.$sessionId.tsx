@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
 import { RequireAuth } from "@/components/auth-gate";
+import { LoadingScreen } from "@/components/loading-screen";
 import { NotFoundState } from "@/components/not-found-state";
 import { ChatRoom } from "@/components/rooms/chat-room";
+import type { SendOptions } from "@/components/rooms/composer";
 import { EmailRoom } from "@/components/rooms/email-room";
 import { IssueRoom } from "@/components/rooms/issue-room";
 import { roomKind } from "@/lib/use-cases";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/session/$sessionId")({
 	component: SessionPage,
@@ -45,7 +47,7 @@ function SessionRoom() {
 							author: "user",
 							text: args.text,
 							at: Date.now(),
-							tips: undefined,
+							tips: args.fromCoachRewrite ? [] : undefined,
 							rewrite: undefined,
 							tipsError: null,
 							streaming: false,
@@ -56,7 +58,7 @@ function SessionRoom() {
 		},
 	);
 
-	if (conversation === undefined) return <div className="h-dvh" />;
+	if (conversation === undefined) return <LoadingScreen />;
 	if (conversation === null) {
 		return (
 			<NotFoundState
@@ -66,8 +68,12 @@ function SessionRoom() {
 		);
 	}
 
-	const onSend = (text: string) => {
-		void send({ conversationId: conversation.id, text });
+	const onSend = (text: string, options: SendOptions) => {
+		void send({
+			conversationId: conversation.id,
+			text,
+			fromCoachRewrite: options.fromCoachRewrite,
+		});
 	};
 
 	const kind = roomKind(conversation.platform);

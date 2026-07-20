@@ -17,7 +17,7 @@ And it's BYOK: bring your own OpenRouter key and it's yours to run. Swap models 
 3. **Write.** The persona replies in character, in the register of the platform: crisp in email, fast and casual in chat.
 4. **Get coached.** Each message you send comes back marked up: grammar fixes, tone notes, and a more natural rewrite when yours reads stiff. Strong phrasing from the persona gets flagged as worth stealing.
 
-Sign-in is Google only. Every account gets a free daily message allowance (30 by default, configurable), and an admin dashboard at `/admin` shows per-user usage, tokens, and cost, plus controls for models, prompts, and limits.
+Sign-in is Google only. Every account gets a free daily message allowance (30 by default, configurable), and an admin dashboard at `/admin` shows per-user usage, tokens, and cost, plus controls for models, prompts, scenario templates, and limits.
 
 ## Stack
 
@@ -42,7 +42,7 @@ bunx convex env set OPENROUTER_API_KEY sk-or-...
 bunx convex env set ADMIN_EMAIL you@example.com
 bunx convex env set AUTH_GOOGLE_ID your-client-id.apps.googleusercontent.com
 bunx convex env set AUTH_GOOGLE_SECRET your-client-secret
-bunx convex env set SITE_URL http://localhost:3000
+bunx convex env set SITE_URL http://localhost:3000/inklish
 ```
 
 For the Google credentials, create an OAuth client (web application) in the [Google Cloud console](https://console.cloud.google.com/apis/credentials) and add this authorized redirect URI, using the deployment name `bunx convex dev` printed:
@@ -51,13 +51,15 @@ For the Google credentials, create an OAuth client (web application) in the [Goo
 https://<your-deployment>.convex.site/api/auth/callback/google
 ```
 
+The web client doesn't use `.env` files — its Convex URL lives in [`src/lib/env.ts`](src/lib/env.ts). In dev it points at a local Convex deployment (`http://127.0.0.1:3210`); if `bunx convex dev` gave you a cloud dev deployment instead, put its `.convex.cloud` URL there.
+
 Then start the app in a second terminal:
 
 ```bash
 bun run dev
 ```
 
-Open http://localhost:3000, sign in with Google, and start a session. The account matching `ADMIN_EMAIL` sees `/admin`; everyone else gets a 404 there.
+Open http://localhost:3000/inklish, sign in with Google, and start a session. The account matching `ADMIN_EMAIL` sees `/admin`; everyone else gets a 404 there.
 
 ## Scripts
 
@@ -66,8 +68,20 @@ Open http://localhost:3000, sign in with Google, and start a session. The accoun
 | `bun run dev` | Vite dev server on port 3000 |
 | `bunx convex dev` | Convex dev deployment with live push |
 | `bun run build` | Production build |
+| `bun run deploy` | Deploy Convex functions, build, and deploy the Worker |
 | `bun run test` | Vitest |
 | `bun run check` | Biome lint + format |
+
+## Deploying
+
+The live app runs at [fahrezi.fyi/inklish](https://fahrezi.fyi/inklish), served by a Cloudflare Worker: `wrangler.jsonc` routes `fahrezi.fyi/inklish*` to the Worker, and [`worker/index.ts`](worker/index.ts) strips the `/inklish` prefix before serving the static build (anything else on the route falls through to the site's origin).
+
+```bash
+bun run deploy                          # convex/ changed: deploy backend + frontend
+bun run build && bunx wrangler deploy   # frontend-only changes
+```
+
+The app is mounted under the `/inklish` base path. To host your own copy at a different path (or at the root), change it in four places: `base` in `vite.config.ts`, `basepath` in `src/main.tsx`, `BASE` in `worker/index.ts`, and the route in `wrangler.jsonc` — plus the prod Convex URL in `src/lib/env.ts` and your deployment's `SITE_URL`.
 
 ## Contributing
 

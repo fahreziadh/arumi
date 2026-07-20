@@ -5,6 +5,7 @@ import { api } from "../../convex/_generated/api";
 import { AppHeader } from "@/components/app-header";
 import { RequireAuth } from "@/components/auth-gate";
 import { KIND_DOT, KIND_LABEL } from "@/components/coach/tip-card";
+import { LoadingScreen } from "@/components/loading-screen";
 import { NotFoundState } from "@/components/not-found-state";
 import { PlatformTile } from "@/components/platform-tile";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ function Report() {
 		conversationId: sessionId,
 	});
 
-	if (conversation === undefined) return <div className="h-dvh" />;
+	if (conversation === undefined) return <LoadingScreen />;
 	if (conversation === null) {
 		return (
 			<NotFoundState

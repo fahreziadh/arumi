@@ -1,18 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	Authenticated,
-	AuthLoading,
-	Unauthenticated,
-	useMutation,
-	useQuery,
-} from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { formatDistanceToNow } from "date-fns";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { AppHeader } from "@/components/app-header";
-import { SignInScreen } from "@/components/auth-gate";
+import { RequireAuth } from "@/components/auth-gate";
 import { PlatformTile } from "@/components/platform-tile";
 import {
 	AlertDialog,
@@ -32,17 +26,9 @@ export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
 	return (
-		<>
-			<AuthLoading>
-				<div className="h-dvh" />
-			</AuthLoading>
-			<Unauthenticated>
-				<SignInScreen />
-			</Unauthenticated>
-			<Authenticated>
-				<Dashboard />
-			</Authenticated>
-		</>
+		<RequireAuth>
+			<Dashboard />
+		</RequireAuth>
 	);
 }
 
