@@ -326,6 +326,39 @@ html:active-view-transition-type(prep-step)::view-transition-new(root) {
   }
 }
 
+/* Sign-in showcase: the coach's ink lands on the message after it is read. */
+.demo-mark {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 280ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.demo-mark[data-lit="true"] {
+  text-decoration-color: var(--demo-mark-color);
+}
+
+.demo-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: demo-caret 1s step-end infinite;
+}
+@keyframes demo-caret {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-caret {
+    animation: none;
+  }
+}
+
 /* The prepare coach bubble hovers gently, like a card in flight. */
 @keyframes coach-float {
   0%,
