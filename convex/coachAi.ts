@@ -31,20 +31,48 @@ const TIP_KINDS = new Set(["fix", "tip", "tone"]);
  */
 const COACH_TEMPERATURE = 0.1;
 
+const APOSTROPHES = "['’‘ʼ`]";
+const DOUBLE_QUOTES = '["“”]';
+
 /**
- * Locates the model's verbatim quote in the text. Models cannot count
- * characters, so spans are recovered here rather than taken from the model.
+ * A quote pattern tolerant of the ways a model retypes what it copied: curly
+ * apostrophes for straight ones, a single space for a line break, a different
+ * capital at the start of a fragment.
+ */
+function quotePattern(quote: string): string {
+	return quote
+		.trim()
+		.split(/(\s+)/)
+		.map((part) =>
+			/^\s+$/.test(part)
+				? "\\s+"
+				: part
+						.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+						.replace(/['’‘ʼ`]/g, APOSTROPHES)
+						.replace(/["“”]/g, DOUBLE_QUOTES),
+		)
+		.join("");
+}
+
+/**
+ * Locates the model's quote in the text. Models cannot count characters, so
+ * spans are recovered here rather than taken from the model. A quote that
+ * cannot be anchored costs the learner the whole tip, so match loosely and
+ * prefer the tightest hit.
  */
 function spanOfQuote(text: string, quote: string): [number, number] | null {
-	const escaped = quote.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const wholeWord = new RegExp(
-		`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`,
-		"u",
-	);
-	const match = wholeWord.exec(text);
-	const start = match ? match.index : text.indexOf(quote);
-	if (start === -1) return null;
-	return [start, start + quote.length];
+	const pattern = quotePattern(quote);
+	if (!pattern) return null;
+	const attempts = [
+		new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, "u"),
+		new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, "ui"),
+		new RegExp(pattern, "ui"),
+	];
+	for (const attempt of attempts) {
+		const match = attempt.exec(text);
+		if (match) return [match.index, match.index + match[0].length];
+	}
+	return null;
 }
 
 export type CoachTipValue = Infer<typeof vCoachTip>;
@@ -87,7 +115,10 @@ function normalizeTips(
 		)
 		.flatMap((t): CoachTipValue[] => {
 			const span = spanOfQuote(text, t.quote as string);
-			if (!span) return [];
+			if (!span) {
+				console.warn("Coach tip dropped, quote not in text", t.quote);
+				return [];
+			}
 			const kind = t.kind as "fix" | "tip" | "tone";
 			const title = withoutLongDashes(t.title || "Worth a look").slice(0, 60);
 			return [
@@ -97,7 +128,7 @@ function normalizeTips(
 					end: span[1],
 					title,
 					detail: withoutLongDashes(t.detail as string),
-					quote: t.quote as string,
+					quote: text.slice(span[0], span[1]),
 					correction: singleCorrection(t.correction),
 					category: isTipCategory(t.category)
 						? t.category
@@ -125,7 +156,7 @@ function normalizeGems(
 					end: span[1],
 					title: "Worth stealing",
 					detail: withoutLongDashes(g.detail as string),
-					quote: g.quote as string,
+					quote: text.slice(span[0], span[1]),
 				},
 			];
 		});
