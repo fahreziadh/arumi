@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-const STORAGE_KEY = "arumi:settings:v1";
+const STORAGE_KEY = "inklish:settings:v1";
 
 export interface Settings {
 	/** Highlight useful phrases in the partner's replies. */

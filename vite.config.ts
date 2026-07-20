@@ -7,6 +7,7 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const config = defineConfig({
+	base: "/inklish/",
 	resolve: { tsconfigPaths: true },
 	plugins: [
 		devtools(),

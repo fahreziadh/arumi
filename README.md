@@ -1,10 +1,10 @@
 <p align="center">
-  <img src=".github/home.png" alt="Arumi home screen: pick a format to practice in" width="900" />
+  <img src=".github/home.png" alt="Inklish home screen: pick a format to practice in" width="900" />
 </p>
 
-# Arumi
+# Inklish
 
-Practice English where you write it. Arumi gives you low-stakes reps in the real formats: email a project manager, reply to an open-source maintainer, keep up in a busy group chat.
+Practice English where you write it. Inklish gives you low-stakes reps in the real formats: email a project manager, reply to an open-source maintainer, keep up in a busy group chat.
 
 Instead of flashcards or generic chatbot windows, you practice inside rooms that look and feel like the real thing: email threads, Slack, GitHub issues, WhatsApp, Telegram, Discord, Teams, LinkedIn, and customer support chats. An AI persona plays the other side of the conversation. A coach reads every message you send and helps you sound natural.
 

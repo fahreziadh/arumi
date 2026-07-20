@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "inklish",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-20",
+  "routes": [
+    { "pattern": "fahrezi.fyi/inklish*", "zone_name": "fahrezi.fyi" }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  }
+}

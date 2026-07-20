@@ -1,4 +1,4 @@
-# Contributing to Arumi
+# Contributing to Inklish
 
 Thanks for helping out. This is a small project; the process is deliberately light.
 

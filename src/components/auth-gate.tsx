@@ -7,7 +7,7 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { siGoogle } from "simple-icons";
-import { ArumiMark } from "@/components/logo";
+import { InklishMark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 
 export function GoogleSignInButton() {
@@ -34,7 +34,7 @@ export function GoogleSignInButton() {
 export function SignInScreen() {
 	return (
 		<div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 text-center">
-			<ArumiMark className="size-12" />
+			<InklishMark className="size-12" />
 			<div>
 				<h1 className="text-balance font-bold text-3xl tracking-tight">
 					Practice English{" "}

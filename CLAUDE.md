@@ -1,4 +1,4 @@
-# Arumi
+# Inklish
 
 ## Never run any program
 

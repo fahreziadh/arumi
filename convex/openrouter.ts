@@ -33,8 +33,8 @@ export function openRouterKey(): string | undefined {
 }
 
 const APP_HEADERS = {
-	"HTTP-Referer": "https://github.com/fahreziadh/arumi",
-	"X-Title": "Arumi",
+	"HTTP-Referer": "https://github.com/fahreziadh/inklish",
+	"X-Title": "Inklish",
 };
 
 function noTextError(model: string, finish: string, reasoned: boolean): Error {

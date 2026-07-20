@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowUp, Pencil } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { RequireAuth } from "@/components/auth-gate";
-import { ArumiMark } from "@/components/logo";
+import { InklishMark } from "@/components/logo";
 import { NotFoundState } from "@/components/not-found-state";
 import { PlatformIcon } from "@/components/platform-icon";
 import { PlatformTile } from "@/components/platform-tile";
@@ -208,7 +208,7 @@ function PrepareFlow() {
 									<path d="M0 0h8L2 10C1.2 6.5 0.8 3.2 0 0z" />
 								</svg>
 								<div className="flex items-start gap-3">
-									<ArumiMark className="mt-0.5 size-6 shrink-0" />
+									<InklishMark className="mt-0.5 size-6 shrink-0" />
 									<div className="min-w-0 flex-1">
 										{prep.thinking && (
 											<span className="flex items-center gap-1 py-2 text-muted-foreground">

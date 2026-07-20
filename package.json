@@ -1,11 +1,11 @@
 {
-  "name": "arumi",
+  "name": "inklish",
   "description": "Practice English where you write it: realistic email, chat, and issue-thread rooms with an AI conversation partner and a coach on every message",
   "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/fahreziadh/arumi.git"
+    "url": "https://github.com/fahreziadh/inklish.git"
   },
   "type": "module",
   "imports": {
@@ -16,6 +16,7 @@
     "generate-routes": "tsr generate",
     "build": "vite build",
     "preview": "vite preview",
+    "deploy": "convex deploy --cmd 'bun run build' && bunx wrangler deploy",
     "test": "vitest run",
     "format": "biome format",
     "lint": "biome lint",

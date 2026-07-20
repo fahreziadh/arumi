@@ -2,7 +2,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { Link } from "@tanstack/react-router";
 import { useConvexAuth, useQuery } from "convex/react";
 import { LogOut, Settings2 } from "lucide-react";
-import { ArumiMark } from "@/components/logo";
+import { InklishMark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { api } from "../../convex/_generated/api";
 
@@ -12,8 +12,8 @@ export function Wordmark() {
 			to="/"
 			className="flex items-center gap-2 rounded-md font-semibold text-lg tracking-tight outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 		>
-			<ArumiMark />
-			arumi
+			<InklishMark />
+			inklish
 		</Link>
 	);
 }
